@@ -59,8 +59,13 @@ public struct OnboardingWizard: View {
             VStack(spacing: 0) {
                 // Top chrome: a small back affordance + a step counter.
                 topBar
+                    #if os(iOS)
+                    .padding(.horizontal, NoopFirstRun.margin)
+                    .padding(.top, 14)
+                    #else
                     .padding(.horizontal, 36)
                     .padding(.top, 42)
+                    #endif
 
                 // The paged content.
                 ZStack {
@@ -82,13 +87,23 @@ public struct OnboardingWizard: View {
                 .frame(maxWidth: 620, maxHeight: .infinity)
                 .transition(stepTransition)
                 .id(step)                       // re-runs the transition per step
+                #if os(iOS)
+                .padding(.horizontal, NoopFirstRun.margin)
+                #else
                 .padding(.horizontal, 40)
+                #endif
 
                 // Bottom: the thread (progress) + the forward CTA.
                 bottomBar
+                    #if os(iOS)
+                    .padding(.horizontal, NoopFirstRun.margin)
+                    .padding(.top, 16)
+                    .padding(.bottom, 20)
+                    #else
                     .padding(.horizontal, 40)
                     .padding(.top, 24)
                     .padding(.bottom, 36)
+                    #endif
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -107,6 +122,12 @@ public struct OnboardingWizard: View {
 
     // MARK: Backgrounds
 
+    #if os(iOS)
+    /// iOS (WHOOP-style): the flat slate page gradient. No breathing bloom, no tinted wash.
+    private var background: some View {
+        NoopPageBackground().ignoresSafeArea()
+    }
+    #else
     private var background: some View {
         ZStack {
             StrandPalette.surfaceBase
@@ -132,6 +153,7 @@ public struct OnboardingWizard: View {
             .ignoresSafeArea()
         }
     }
+    #endif
 
     // MARK: Top bar
 
@@ -164,7 +186,7 @@ public struct OnboardingWizard: View {
 
     @ViewBuilder
     private var bottomBar: some View {
-        VStack(spacing: 28) {
+        VStack(spacing: Self.bottomBarSpacing) {
             ThreadProgress(progress: progress)
                 .frame(height: 3)
                 .frame(maxWidth: 620)
@@ -175,6 +197,15 @@ public struct OnboardingWizard: View {
             }
             .frame(maxWidth: 620)
         }
+    }
+
+    /// Gap between the progress thread and the CTA (tighter on iOS, where the CTA sits near the bottom).
+    private static var bottomBarSpacing: CGFloat {
+        #if os(iOS)
+        return 20
+        #else
+        return 28
+        #endif
     }
 
     private var progress: Double {
@@ -284,6 +315,15 @@ private struct WelcomeStep: View {
                 BrandMark(size: 120)
                     .scaleEffect(appear ? 1 : 0.92)
                     .opacity(appear ? 1 : 0)
+                #if os(iOS)
+                Text("all your data, none of the cloud")
+                    .noopFirstRunHeadline()
+                    .opacity(appear ? 1 : 0)
+                Text("A private window into your recovery, sleep and strain. Read straight from your strap, kept only on \(Platform.deviceNounPhrase).")
+                    .noopFirstRunSubtitle()
+                    .frame(maxWidth: 420)
+                    .opacity(appear ? 1 : 0)
+                #else
                 Text("all your data, none of the cloud")
                     .font(StrandFont.title2)
                     .foregroundStyle(StrandPalette.textSecondary)
@@ -294,6 +334,7 @@ private struct WelcomeStep: View {
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 420)
                     .opacity(appear ? 1 : 0)
+                #endif
                 Spacer()
             }
         }
@@ -678,6 +719,24 @@ private struct BondedStep: View {
     @State private var bloom = false
     var body: some View {
         StepShell {
+            #if os(iOS)
+            // WHOOP-style success: a green glowing check joined by a thin green line to a plain
+            // phone outline and a plain band outline (original shapes).
+            VStack(spacing: 36) {
+                Spacer()
+                NoopPairingSuccessGraphic(revealed: bloom)
+                    .frame(height: 120)
+
+                VStack(spacing: 10) {
+                    Text("You're connected.")
+                        .noopFirstRunHeadline()
+                    Text(batteryLine)
+                        .noopFirstRunSubtitle()
+                }
+                .opacity(bloom ? 1 : 0)
+                Spacer()
+            }
+            #else
             VStack(spacing: 26) {
                 Spacer()
                 ZStack {
@@ -710,6 +769,7 @@ private struct BondedStep: View {
                 .opacity(bloom ? 1 : 0)
                 Spacer()
             }
+            #endif
         }
         .onAppear { withAnimation(StrandMotion.hero) { bloom = true } }
     }
@@ -1034,12 +1094,14 @@ private struct DoneStep: View {
             VStack(spacing: 22) {
                 Spacer()
                 ZStack {
+                    #if !os(iOS)
                     Circle()
                         .fill(StrandPalette.recovery100)
                         .frame(width: 120, height: 120)
                         .blur(radius: 64)
                         .opacity(appear ? 0.5 : 0)
                         .blendMode(.plusLighter)
+                    #endif
                     Image(systemName: "point.topleft.down.curvedto.point.bottomright.up")
                         .font(.system(size: 52, weight: .light))
                         .foregroundStyle(
@@ -1052,6 +1114,13 @@ private struct DoneStep: View {
                 .frame(height: 130)
 
                 VStack(spacing: 10) {
+                    #if os(iOS)
+                    Text("Your thread starts here.")
+                        .noopFirstRunHeadline()
+                    Text("Every beat, every night, every day, woven into one quiet picture of you. Welcome to NOOP.")
+                        .noopFirstRunSubtitle()
+                        .frame(maxWidth: 420)
+                    #else
                     Text("Your thread starts here.")
                         .font(StrandFont.title1)
                         .foregroundStyle(StrandPalette.textPrimary)
@@ -1060,6 +1129,7 @@ private struct DoneStep: View {
                         .foregroundStyle(StrandPalette.textSecondary)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: 420)
+                    #endif
                 }
                 .opacity(appear ? 1 : 0)
                 Spacer()
@@ -1110,6 +1180,21 @@ private struct StepShell<Content: View>: View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(spacing: 20) {
                 if title != nil || subtitle != nil {
+                    #if os(iOS)
+                    // WHOOP-style step header: uppercase wide-tracked headline + 16pt subtitle.
+                    VStack(spacing: 12) {
+                        if let title {
+                            Text(title)
+                                .noopFirstRunHeadline()
+                        }
+                        if let subtitle {
+                            Text(subtitle)
+                                .noopFirstRunSubtitle()
+                        }
+                    }
+                    .padding(.top, 8)
+                    .padding(.bottom, 4)
+                    #else
                     VStack(spacing: 8) {
                         if let title {
                             Text(title)
@@ -1125,6 +1210,7 @@ private struct StepShell<Content: View>: View {
                         }
                     }
                     .padding(.top, 8)
+                    #endif
                 }
                 content()
             }
@@ -1243,6 +1329,17 @@ private struct ThreadProgress: View {
     var progress: Double           // 0...1
     var body: some View {
         GeometryReader { geo in
+            #if os(iOS)
+            // Flat progress: #353C42 track, solid fill, fully rounded, no glow.
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(NoopWhoop.track)
+                Capsule()
+                    .fill(StrandPalette.textPrimary)
+                    .frame(width: max(6, geo.size.width * progress))
+                    .animation(StrandMotion.gentle, value: progress)
+            }
+            #else
             ZStack(alignment: .leading) {
                 Capsule()
                     .fill(StrandPalette.hairline)
@@ -1253,6 +1350,7 @@ private struct ThreadProgress: View {
                     .shadow(color: StrandPalette.recovery078.opacity(0.6), radius: 6)
                     .animation(StrandMotion.gentle, value: progress)
             }
+            #endif
         }
     }
 }
@@ -1376,10 +1474,18 @@ private struct PrimaryButton: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
+                #if os(iOS)
+                // The outline-capsule style owns the face (uppercase bold tracked label).
+                Text(title)
+                if let systemImage {
+                    Image(systemName: systemImage)
+                }
+                #else
                 Text(title).font(StrandFont.headline)
                 if let systemImage {
                     Image(systemName: systemImage).font(.system(size: 14, weight: .semibold))
                 }
+                #endif
             }
         }
         .buttonStyle(PrimaryButtonStyle())
@@ -1387,6 +1493,12 @@ private struct PrimaryButton: View {
 }
 
 private struct PrimaryButtonStyle: ButtonStyle {
+    #if os(iOS)
+    /// iOS (WHOOP-style): the full-width outline capsule CTA with an UPPERCASE tracked label.
+    func makeBody(configuration: Configuration) -> some View {
+        NoopOutlineButtonStyle().makeBody(configuration: configuration)
+    }
+    #else
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .frame(maxWidth: .infinity)
@@ -1401,6 +1513,7 @@ private struct PrimaryButtonStyle: ButtonStyle {
             .scaleEffect(configuration.isPressed ? 0.985 : 1)
             .animation(StrandMotion.interactive, value: configuration.isPressed)
     }
+    #endif
 }
 
 private struct SecondaryButtonStyle: ButtonStyle {

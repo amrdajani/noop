@@ -292,7 +292,7 @@ public struct OverviewHRChart: View {
         ForEach(displayPoints) { p in
             LineMark(x: .value("Time", p.date), y: .value("BPM", p.value))
                 .interpolationMethod(.catmullRom)
-                .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                .lineStyle(StrokeStyle(lineWidth: NoopChartStyle.lineWidth, lineCap: .round, lineJoin: .round))
                 .foregroundStyle(lineStroke)
         }
 
@@ -435,16 +435,16 @@ public struct OverviewHRChart: View {
             // Manual ticks chosen by visible span (6h down to 1min), matching Android chartTimeTicks.
             // Swift Charts' .automatic(desiredCount:) doesn't guarantee per-minute ticks at deep zoom.
             AxisMarks(values: xTicks) { _ in
-                AxisGridLine().foregroundStyle(StrandPalette.hairline.opacity(0.4))
-                AxisValueLabel().foregroundStyle(StrandPalette.textTertiary)
-                    .font(StrandFont.footnote)
+                AxisGridLine().foregroundStyle(NoopChartStyle.grid)
+                AxisValueLabel().foregroundStyle(NoopChartStyle.axisLabel)
+                    .font(NoopChartStyle.axisFont)
             }
         }
         .chartYAxis {
             AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { _ in
-                AxisGridLine().foregroundStyle(StrandPalette.hairline.opacity(0.4))
-                AxisValueLabel().foregroundStyle(StrandPalette.textTertiary)
-                    .font(StrandFont.footnote)
+                AxisGridLine().foregroundStyle(NoopChartStyle.grid)
+                AxisValueLabel().foregroundStyle(NoopChartStyle.axisLabel)
+                    .font(NoopChartStyle.axisFont)
             }
         }
         .chartOverlay { proxy in
@@ -633,7 +633,7 @@ private struct WorkoutBadge: View {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .fill(tint)
             )
-            .shadow(color: tint.opacity(0.5), radius: 4, y: 1)
+            .noopLegacyShadow(color: tint.opacity(0.5), radius: 4, y: 1)
             .allowsHitTesting(false)
     }
 }

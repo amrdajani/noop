@@ -107,6 +107,19 @@ struct UpdatesInboxView: View {
         }
     }
 
+    #if os(iOS)
+    private var emptyState: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 40)
+            NoopEmptyState(symbol: "bell.slash",
+                           title: "You're all caught up.",
+                           message: "New release notes and fresh data will land here.")
+            Spacer(minLength: 40)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 32)
+    }
+    #else
     private var emptyState: some View {
         VStack(spacing: 12) {
             Spacer(minLength: 40)
@@ -127,6 +140,7 @@ struct UpdatesInboxView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 32)
     }
+    #endif
 
     // MARK: Footer
 

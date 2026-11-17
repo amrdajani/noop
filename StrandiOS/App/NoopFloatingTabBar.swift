@@ -21,8 +21,14 @@ enum NoopFloatingTabBarMetrics {
     static let actionGap: CGFloat = 12
     static let pillRadius: CGFloat = 32
     static let actionRadius: CGFloat = 24
-    /// Radius of the highlighted backdrop behind the selected item.
-    static let selectedItemRadius: CGFloat = 26
+    /// Even gap between the pill's edge and the selected item's backdrop, on all four sides.
+    static let selectedItemInset: CGFloat = 4
+    /// Radius of the highlighted backdrop behind the selected item: concentric with the pill
+    /// (`pillRadius - selectedItemInset`).
+    static let selectedItemRadius: CGFloat = 28
+    /// Height of the scrim that fades scrolled content out behind the bar, measured up from the
+    /// bottom safe-area edge (the scrim also covers the safe area below it).
+    static let scrimHeight: CGFloat = 120
     /// Distance from the physical screen bottom to the bar's bottom edge on home-indicator devices.
     static let bottomFromScreenEdge: CGFloat = 26
     /// Bottom gap above the screen edge on devices with no home indicator (safe-area bottom of 0).
@@ -114,8 +120,12 @@ struct NoopFloatingTabBar: View {
 
     private typealias M = NoopFloatingTabBarMetrics
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Shared by every item's selected backdrop, so it slides from the old item to the new one.
+    @Namespace private var selectionNamespace
+
     var body: some View {
-        HStack(spacing: M.actionGap) {
+        HStack(alignment: .center, spacing: M.actionGap) {
             pill
             if showsAction {
                 NoopFloatingActionButton(title: actionTitle, isSelected: actionIsSelected, action: onAction)
@@ -129,16 +139,24 @@ struct NoopFloatingTabBar: View {
     private var pill: some View {
         HStack(spacing: 0) {
             ForEach(items) { item in
-                NoopFloatingTabButton(item: item, isSelected: item.tag == selection) {
+                NoopFloatingTabButton(
+                    item: item,
+                    isSelected: item.tag == selection,
+                    namespace: selectionNamespace,
+                    reduceMotion: reduceMotion
+                ) {
                     onSelect(item.tag)
                 }
             }
         }
-        .padding(.horizontal, 4)
+        // Even inset on all four sides: the selected backdrop fills its column inside this padding,
+        // so it sits 4pt from the pill edge and is vertically centred.
+        .padding(M.selectedItemInset)
         .frame(maxWidth: .infinity)
         .frame(height: M.barHeight)
         .background { NoopFloatingPillBackground() }
-        .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.24), value: selection)
+        .animation(reduceMotion ? nil : Animation.spring(response: 0.35, dampingFraction: 0.82),
+                   value: selection)
     }
 }
 
@@ -167,25 +185,47 @@ private struct NoopFloatingPillBackground: View {
 private struct NoopFloatingTabButton: View {
     let item: NoopFloatingTabItem
     let isSelected: Bool
+    /// Namespace of the sliding selected backdrop (owned by the bar).
+    let namespace: Namespace.ID
+    let reduceMotion: Bool
     let action: () -> Void
 
+    /// Scale of the icon; pulsed briefly on tap.
+    @State private var iconScale: CGFloat = 1
+
+    /// A light bounce on the tapped icon: a quick lift, then a spring back. Skipped under Reduce Motion.
+    private func bounceIcon() {
+        guard !reduceMotion else { return }
+        withAnimation(.easeOut(duration: 0.1)) { iconScale = 1.12 }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.55)) { iconScale = 1 }
+        }
+    }
+
     var body: some View {
-        Button(action: action) {
-            VStack(spacing: 4) {
+        Button {
+            bounceIcon()
+            action()
+        } label: {
+            VStack(spacing: 3) {
                 Image(systemName: item.icon)
                     .font(.system(size: 24, weight: .regular))
                     // Outline glyphs in both states; selection is carried by colour, weight and backdrop.
                     .environment(\.symbolVariants, .none)
                     .frame(height: 26)
+                    .scaleEffect(iconScale)
                 Text(item.title)
                     .font(.system(size: 12.5, weight: isSelected ? .semibold : .regular))
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
             }
             .foregroundStyle(isSelected ? NoopTabChromeTokens.itemSelected : NoopTabChromeTokens.itemUnselected)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Equal-width column filling the pill's inner height; the icon + label group is centred in it.
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             .background {
                 if isSelected {
+                    // One backdrop shared across items through the namespace: on a selection change it
+                    // slides from the previous column to this one (animated by the pill).
                     RoundedRectangle(cornerRadius: NoopFloatingTabBarMetrics.selectedItemRadius, style: .continuous)
                         .fill(
                             LinearGradient(
@@ -194,7 +234,7 @@ private struct NoopFloatingTabButton: View {
                                 endPoint: .bottom
                             )
                         )
-                        .padding(.vertical, 5)
+                        .matchedGeometryEffect(id: "noop.tabbar.selection", in: namespace)
                         .transition(.opacity)
                 }
             }
@@ -207,7 +247,7 @@ private struct NoopFloatingTabButton: View {
     }
 }
 
-/// The square Coach button to the right of the pill: radial navy fill, hairline border, and a purple
+/// The round Coach button to the right of the pill (same height, centred on it): radial navy fill, hairline border, and a purple
 /// ring with a soft glow around a sparkles glyph (NOOP's own mark, not a third-party logo).
 private struct NoopFloatingActionButton: View {
     let title: LocalizedStringKey
@@ -218,7 +258,7 @@ private struct NoopFloatingActionButton: View {
 
     var body: some View {
         Button(action: action) {
-            let shape = RoundedRectangle(cornerRadius: M.actionRadius, style: .continuous)
+            let shape = Circle()
             ZStack {
                 shape.fill(
                     RadialGradient(

@@ -2765,10 +2765,17 @@ struct SettingsView: View {
     // MARK: - Shared bits
 
     private var rowDivider: some View {
+        #if os(iOS)
+        // White 8% hairline, flush between the 52pt rows.
+        Rectangle()
+            .fill(NoopWhoop.divider)
+            .frame(height: 1)
+        #else
         Rectangle()
             .fill(StrandPalette.hairline)
             .frame(height: 1)
             .padding(.vertical, 4)
+        #endif
     }
 }
 
@@ -3431,7 +3438,12 @@ private struct FormRow<Control: View>: View {
             control()
                 .layoutPriority(1)
         }
+        #if os(iOS)
+        // WHOOP-style form row: 52pt minimum height; `rowDivider` (white 8%) separates rows.
+        .frame(minHeight: 52)
+        #else
         .frame(minHeight: 32)
+        #endif
     }
 }
 

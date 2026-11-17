@@ -259,6 +259,24 @@ struct ConfidenceTierChip: View {
     private var hue: Color { ChargeBreakdownFormat.confidenceDotColor(confidence) }
 
     var body: some View {
+        #if os(iOS)
+        // The shared status pill: 16% fill, 10.5pt heavy uppercase, tracking 1.2, no stroke, no glow.
+        HStack(spacing: 5) {
+            Circle()
+                .fill(hue)
+                .frame(width: 6, height: 6)
+                .accessibilityHidden(true)
+            Text(tag)
+        }
+        .noopStatusPill(hue)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibility)
+        #else
+        legacyBody
+        #endif
+    }
+
+    private var legacyBody: some View {
         HStack(spacing: 6) {
             Circle()
                 .fill(hue)

@@ -59,9 +59,16 @@ struct SleepHRChart: View {
                     let y = size.height * (1 - CGFloat((grid - lo) / max(1, hi - lo)))
                     var line = Path()
                     line.move(to: CGPoint(x: 0, y: y)); line.addLine(to: CGPoint(x: size.width, y: y))
+                    #if os(iOS)
+                    // Shared chart chrome: white-6% grid, 10pt tertiary axis labels.
+                    ctx.stroke(line, with: .color(NoopChartStyle.grid), lineWidth: 1)
+                    ctx.draw(Text(verbatim: "\(Int(grid))").font(NoopChartStyle.axisFont).foregroundColor(NoopChartStyle.axisLabel),
+                             at: CGPoint(x: 10, y: y - 7))
+                    #else
                     ctx.stroke(line, with: .color(StrandPalette.hairline.opacity(0.5)), lineWidth: 1)
                     ctx.draw(Text(verbatim: "\(Int(grid))").font(.system(size: 9)).foregroundColor(StrandPalette.textTertiary),
                              at: CGPoint(x: 10, y: y - 7))
+                    #endif
                     grid += step
                 }
                 // Base trace across the whole night; the line BREAKS across >5-min data gaps.

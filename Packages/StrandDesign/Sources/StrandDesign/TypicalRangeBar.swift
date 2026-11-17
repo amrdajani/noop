@@ -91,7 +91,7 @@ public struct TypicalRangeBar: View {
 
             ZStack(alignment: .leading) {
                 // Base track — the inset "well" the bar sits in.
-                shape.fill(StrandPalette.surfaceInset)
+                shape.fill(NoopChartStyle.barTrack)
 
                 // Diagonal-hatch "typical range" segment (only over the range span).
                 if let t = clampedTypical, t.upperBound > t.lowerBound {
@@ -112,7 +112,7 @@ public struct TypicalRangeBar: View {
             }
             .clipShape(shape)
         }
-        .frame(height: height)
+        .frame(height: NoopChartStyle.barHeight(height))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(axLabel))
     }

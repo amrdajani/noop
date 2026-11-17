@@ -606,6 +606,20 @@ enum DemoScreens {
         // + self-service pairing guidance, screenshot-able WITHOUT reproducing the bond refusal on real
         // hardware.
         case "bondrefused": return AnyView(BondRefusedDemoScreen())
+        // First-run + secondary screens for the design-preview screenshots. Each is an existing view
+        // with no (or a trivially constructible) initialiser; the closures are inert in the harness.
+        case "terms":        return AnyView(TermsGateView(onAccept: {}))
+        case "onboarding":   return AnyView(OnboardingWizard(onFinished: {}))
+        case "whatsnew":     return AnyView(WhatsNewView(onClose: {}))
+        case "coach":        return AnyView(CoachView())
+        case "intelligence": return AnyView(IntelligenceView())
+        case "hydration":    return AnyView(HydrationView())
+        case "breathing":    return AnyView(BreathingView())
+        case "alarms":       return AnyView(SmartAlarmView())
+        case "insightshub":  return AnyView(InsightsHubView())
+        case "labbook":      return AnyView(LabBookView())
+        case "datasources":  return AnyView(DataSourcesView())
+        case "automations":  return AnyView(AutomationsView())
         default:         return nil
         }
     }

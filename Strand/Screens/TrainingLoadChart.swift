@@ -65,16 +65,36 @@ struct TrainingLoadChart: View {
                          series: .value("Series", "CTL"))
                     .foregroundStyle(StrandPalette.gold)
                     .interpolationMethod(.catmullRom)
+                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
             }
             ForEach(atlRows) { r in
                 LineMark(x: .value("Day", r.date), y: .value("ATL", r.atl),
                          series: .value("Series", "ATL"))
                     .foregroundStyle(StrandPalette.strain100)
                     .interpolationMethod(.catmullRom)
+                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
             }
         }
         .chartYScale(domain: 0...(maxY * 1.08))
+        #if os(iOS)
+        // Shared chart chrome: white-6% grid, 10pt tertiary axis labels.
+        .chartYAxis {
+            AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { _ in
+                AxisGridLine().foregroundStyle(NoopChartStyle.grid)
+                AxisValueLabel().foregroundStyle(NoopChartStyle.axisLabel)
+                    .font(NoopChartStyle.axisFont)
+            }
+        }
+        .chartXAxis {
+            AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+                AxisGridLine().foregroundStyle(NoopChartStyle.grid)
+                AxisValueLabel().foregroundStyle(NoopChartStyle.axisLabel)
+                    .font(NoopChartStyle.axisFont)
+            }
+        }
+        #else
         .chartYAxis { AxisMarks(position: .leading) }
+        #endif
         .chartOverlay { proxy in
             GeometryReader { geo in
                 let plot = proxy.plotRectCompat(in: geo)

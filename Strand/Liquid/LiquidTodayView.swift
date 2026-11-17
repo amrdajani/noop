@@ -796,8 +796,16 @@ struct LiquidTodayView: View {
     private var yourCardsSection: some View {
         VStack(spacing: 8) {
             HStack {
+                #if os(iOS)
+                Text("YOUR CARDS")
+                    .font(WhoopHomeStyle.headerFont)
+                    .tracking(WhoopHomeStyle.headerTracking)
+                    .foregroundStyle(WhoopHomeStyle.sectionHeader)
+                    .lineLimit(1)
+                #else
                 Text("YOUR CARDS").font(StrandFont.overline).tracking(1.6)
                     .foregroundStyle(StrandPalette.textTertiary)
+                #endif
                 Spacer()
                 Button { customizationDestination = .yourCards } label: {
                     // #492 item 4 parity: unify the Your Cards / Key Metrics edit affordance to "EDIT" across
@@ -808,7 +816,9 @@ struct LiquidTodayView: View {
                 }
                 .buttonStyle(.plain)
             }
+            #if !os(iOS)
             .padding(.horizontal, 2)
+            #endif
             .padding(.top, 4)
 
             // Data-driven off the SAME @AppStorage the CUSTOMISE editor writes, so add / remove /
@@ -1288,8 +1298,16 @@ struct LiquidTodayView: View {
         return card {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
+                    #if os(iOS)
+                    Text("RECOVERY VITALS")
+                        .font(WhoopHomeStyle.headerFont)
+                        .tracking(WhoopHomeStyle.headerTracking)
+                        .foregroundStyle(Color.white)
+                        .lineLimit(1)
+                    #else
                     Text("RECOVERY VITALS").font(StrandFont.overline).tracking(1.6)
                         .foregroundStyle(StrandPalette.textSecondary)
+                    #endif
                     Spacer()
                     if let line = vitalsProvenanceLine {
                         Text(line).font(StrandFont.caption).foregroundStyle(StrandPalette.textTertiary)
@@ -1645,9 +1663,10 @@ struct LiquidTodayView: View {
         HStack(alignment: .firstTextBaseline) {
             #if os(iOS)
             Text(LocalizedStringKey(title))
-                .font(.system(size: 12.5, weight: .heavy))
-                .tracking(1.8)
-                .foregroundStyle(WhoopHomeStyle.textSecondary)
+                .font(WhoopHomeStyle.headerFont)
+                .tracking(WhoopHomeStyle.headerTracking)
+                .foregroundStyle(WhoopHomeStyle.sectionHeader)
+                .lineLimit(1)
             #else
             Text(LocalizedStringKey(title)).font(StrandFont.overline).tracking(1.6).foregroundStyle(StrandPalette.textTertiary)
             #endif
@@ -1656,7 +1675,10 @@ struct LiquidTodayView: View {
                 Text(LocalizedStringKey(trailing)).font(StrandFont.caption).foregroundStyle(StrandPalette.textTertiary)
             }
         }
+        // iOS: flush with the 16pt page margin, the same edge the cards start on.
+        #if !os(iOS)
         .padding(.horizontal, 2)
+        #endif
         .padding(.top, 4)
     }
 
@@ -3304,7 +3326,15 @@ fileprivate enum WhoopHomeStyle {
     static let bodyText = rgb(0xC6CBCF)
     static let textSecondary = Color.white.opacity(0.72)
     static let textTertiary = Color.white.opacity(0.5)
+    /// Section headers that sit above a group of cards (KEY METRICS, HEART RATE, ...).
+    static let sectionHeader = rgb(0xA6ADB3)
+    /// Uppercase header / card-title type: 12pt heavy, tracking 2. One style for both; only the
+    /// colour differs (white inside a card, `sectionHeader` above a group).
+    static let headerFont = Font.system(size: 12, weight: .heavy)
+    static let headerTracking: CGFloat = 2
     static let cardRadius: CGFloat = 16
+    /// Ring arc sweep (first appear + value change).
+    static let ringSweep = Animation.easeOut(duration: 0.9)
 
     static var pageGradient: LinearGradient {
         LinearGradient(stops: [
@@ -3330,24 +3360,41 @@ fileprivate struct WhoopCardSurface: View {
 }
 
 /// A thin full-circle track with a progress arc from 12 o'clock, clockwise. nil/0 progress = track only.
+///
+/// Motion: the arc sweeps from 0 to its value on first appear and again whenever the value changes
+/// (a day change, a fresh score). Under Reduce Motion it is simply drawn at its value.
 fileprivate struct WhoopRing: View {
     let progress: Double?
     let color: Color
     var lineWidth: CGFloat = 5.5
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// False until the ring is on screen, so the first frame starts the sweep from 0.
+    @State private var appeared = false
+
+    private var target: Double {
+        guard let progress, progress.isFinite else { return 0 }
+        return max(0, min(1, progress))
+    }
+    /// What the arc is trimmed to right now.
+    private var shown: Double { (appeared || reduceMotion) ? target : 0 }
+    private var sweep: Animation? { reduceMotion ? nil : WhoopHomeStyle.ringSweep }
+
     var body: some View {
         ZStack {
             Circle()
                 .stroke(WhoopHomeStyle.track, lineWidth: lineWidth)
-            if let progress, progress > 0 {
-                Circle()
-                    .trim(from: 0, to: CGFloat(min(1, progress)))
-                    .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-            }
+            Circle()
+                .trim(from: 0, to: CGFloat(shown))
+                .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                // An empty arc still paints its round cap as a dot; hide it at zero.
+                .opacity(target > 0 ? 1 : 0)
         }
         .padding(lineWidth / 2)
-        .animation(.easeOut(duration: 0.6), value: progress)
+        .animation(sweep, value: target)
+        .animation(sweep, value: appeared)
+        .onAppear { appeared = true }
         .accessibilityHidden(true)
     }
 }
@@ -3365,22 +3412,31 @@ fileprivate struct WhoopRingValue: View {
             : String(Int(value.rounded()))
     }
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         Group {
             if let numberText {
+                // One concatenated Text, so the smaller "%" sits on the number's baseline and the
+                // pair scales down together when space is tight.
                 (Text(verbatim: numberText)
                     .font(.system(size: 30, weight: .bold).width(.condensed))
                  + Text(verbatim: showsPercent ? "%" : "")
                     .font(.system(size: 17, weight: .bold).width(.condensed)))
                     .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .transition(.opacity)
             } else {
                 Text(verbatim: "—")
                     .font(.system(size: 26, weight: .bold).width(.condensed))
+                    .transition(.opacity)
             }
         }
         .foregroundStyle(Color.white)
         .lineLimit(1)
         .minimumScaleFactor(0.6)
+        // Digits roll / crossfade when the value changes (day change, fresh score).
+        .animation(reduceMotion ? nil : Animation.easeOut(duration: 0.35), value: numberText)
         .accessibilityHidden(true)
     }
 }
@@ -3418,6 +3474,9 @@ extension LiquidTodayView {
                 Color.clear.frame(height: 90) // floating tab-bar clearance
             }
             .padding(.top, 28)
+            // The dismissed-day flag is @AppStorage, whose change arrives through UserDefaults and can
+            // miss the `withAnimation` in the button; this makes the removal animate either way.
+            .animation(whoopInsightDismissAnimation, value: insightDismissedDay)
         }
         .padding(.horizontal, 16)
         // Dark-only surface: resolve the theme-aware palette tokens used by the reused sections dark too.
@@ -3444,13 +3503,15 @@ extension LiquidTodayView {
     // MARK: Header
 
     fileprivate var whoopHeader: some View {
-        ZStack {
-            HStack(spacing: 0) {
-                whoopAvatar
-                Spacer(minLength: 8)
-                WhoopStrapStatusButton()
-            }
+        // The two side groups are equal-width flexible columns, so the fixed-width day pill between
+        // them is exactly centred whatever each side holds.
+        HStack(spacing: 8) {
+            whoopAvatar
+                .frame(maxWidth: .infinity, alignment: .leading)
             whoopDayPill
+                .layoutPriority(1)
+            WhoopStrapStatusButton()
+                .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .frame(height: 31)
     }
@@ -3568,6 +3629,8 @@ extension LiquidTodayView {
         let effortMax: Double = effortScale == .whoop ? 21 : 100
         let effortValue = effortStrain(displayDay).map { UnitFormatter.effortValue($0, scale: effortScale) }
         let chargeTint = chargeDisplay.pct.map { StrandPalette.recoveryColor($0) } ?? StrandPalette.chargeColor
+        // Three equal-width columns (each `maxWidth: .infinity`, no spacing): the rings sit at 1/6, 3/6
+        // and 5/6 of the row on any device width, so the gaps between them are always equal.
         return HStack(alignment: .top, spacing: 0) {
             whoopRingColumn(label: String(localized: "Rest"), value: restScore, maxValue: 100,
                             decimals: 0, showsPercent: true, color: WhoopHomeStyle.rest,
@@ -3604,8 +3667,8 @@ extension LiquidTodayView {
                 .frame(width: 88, height: 88)
                 HStack(spacing: 3) {
                     Text(verbatim: label.uppercased())
-                        .font(.system(size: 12, weight: .heavy))
-                        .tracking(2.2)
+                        .font(WhoopHomeStyle.headerFont)
+                        .tracking(WhoopHomeStyle.headerTracking)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                     Image(systemName: "chevron.right")
@@ -3616,7 +3679,7 @@ extension LiquidTodayView {
             .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(NoopPressableCardStyle())
         .accessibilityLabel(Text("\(label), \(spoken)"))
         .accessibilityHint(Text("Opens the trend and readings"))
         .accessibilityAction(named: Text("See how it is scored")) { guideSection = guide }
@@ -3644,6 +3707,7 @@ extension LiquidTodayView {
     }
 
     fileprivate var whoopMonitorCards: some View {
+        // Both cards are the same fixed height (`whoopMonitorCardHeight`) and equal-width columns.
         HStack(alignment: .top, spacing: 12) {
             NavigationLink(value: TabRoute.health) {
                 whoopMonitorCard(title: String(localized: "Health monitor")) {
@@ -3661,7 +3725,7 @@ extension LiquidTodayView {
                     }
                 }
             }
-            .buttonStyle(LiquidPressStyle())
+            .buttonStyle(NoopPressableCardStyle())
 
             NavigationLink(value: TabRoute.stress) {
                 whoopMonitorCard(title: String(localized: "Stress monitor")) {
@@ -3691,7 +3755,7 @@ extension LiquidTodayView {
                     }
                 }
             }
-            .buttonStyle(LiquidPressStyle())
+            .buttonStyle(NoopPressableCardStyle())
         }
     }
 
@@ -3701,23 +3765,30 @@ extension LiquidTodayView {
             .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(WhoopHomeStyle.chip))
     }
 
+    /// Fixed height of both monitor cards.
+    fileprivate static var whoopMonitorCardHeight: CGFloat { 92 }
+
+    /// Title pinned 18pt from the top, the chip row pinned 18pt from the bottom; the spacer between
+    /// them absorbs whatever is left, so a one-line and a two-line status row both end on the same line.
     fileprivate func whoopMonitorCard<V: View>(title: String, @ViewBuilder _ content: () -> V) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 4) {
                 Text(verbatim: title.uppercased())
-                    .font(.system(size: 12, weight: .heavy))
-                    .tracking(1.4)
+                    .font(WhoopHomeStyle.headerFont)
+                    .tracking(WhoopHomeStyle.headerTracking)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 9, weight: .heavy))
             }
             .foregroundStyle(Color.white)
-            Spacer(minLength: 10)
+            Spacer(minLength: 4)
             content()
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 92, maxHeight: 92, alignment: .topLeading)
+        .padding(.vertical, 18)
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .frame(height: Self.whoopMonitorCardHeight, alignment: .topLeading)
         .background(WhoopCardSurface(opacity: cardOpacity))
         .contentShape(RoundedRectangle(cornerRadius: WhoopHomeStyle.cardRadius, style: .continuous))
     }
@@ -3729,28 +3800,19 @@ extension LiquidTodayView {
     @ViewBuilder
     fileprivate var whoopInsightCard: some View {
         if sectionOrder.contains(.synthesis), insightDismissedDay != selectedDayKey {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .top, spacing: 8) {
-                    Text(verbatim: (readinessWord.map { String(localized: "Today: \($0)") }
-                                    ?? chargeDisplay.stateLabel).uppercased())
-                        .font(.system(size: 12.5, weight: .heavy))
-                        .tracking(1.8)
-                        .foregroundStyle(Color.white)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                    Spacer(minLength: 8)
-                    Button {
-                        withAnimation(.easeOut(duration: 0.2)) { insightDismissedDay = selectedDayKey }
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(Color.white.opacity(0.8))
-                            .frame(width: 28, height: 28, alignment: .topTrailing)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(Text("Dismiss"))
-                }
+            // Height hugs the content: 20pt padding, 12pt between title, body and link, and a 120pt
+            // floor so a one-line insight still reads as a card.
+            VStack(alignment: .leading, spacing: 12) {
+                Text(verbatim: (readinessWord.map { String(localized: "Today: \($0)") }
+                                ?? chargeDisplay.stateLabel).uppercased())
+                    .font(WhoopHomeStyle.headerFont)
+                    .tracking(WhoopHomeStyle.headerTracking)
+                    .foregroundStyle(Color.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    // Room for the dismiss button, which is overlaid in the top-trailing corner so
+                    // its tap target does not stretch the title row.
+                    .padding(.trailing, 28)
                 Text(verbatim: chargeDisplay.calibrationDetail ?? synthLine)
                     .font(.system(size: 15))
                     .foregroundStyle(WhoopHomeStyle.bodyText)
@@ -3762,7 +3824,6 @@ extension LiquidTodayView {
                         .foregroundStyle(WhoopHomeStyle.textTertiary)
                         .lineLimit(2)
                 }
-                Spacer(minLength: 0)
                 Button {
                     if coachEnabled { showCoachLauncher = true } else { guideSection = .charge }
                 } label: {
@@ -3780,15 +3841,39 @@ extension LiquidTodayView {
                 }
                 .buttonStyle(.plain)
             }
-            .padding(18)
-            .frame(maxWidth: .infinity, minHeight: 170, alignment: .topLeading)
+            .padding(20)
+            .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
             .background(
                 RoundedRectangle(cornerRadius: WhoopHomeStyle.cardRadius, style: .continuous)
                     .fill(WhoopHomeStyle.insightGradient)
                     .opacity(cardOpacity)
             )
-            .transition(.opacity)
+            .overlay(alignment: .topTrailing) {
+                Button {
+                    withAnimation(whoopInsightDismissAnimation) { insightDismissedDay = selectedDayKey }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Color.white.opacity(0.8))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 5)
+                .padding(.trailing, 5)
+                .accessibilityLabel(Text("Dismiss"))
+            }
+            // Dismissal fades and settles the card away (the column below closes up in the same
+            // animation) instead of popping. Reduce Motion: plain removal.
+            .transition(reduceMotion
+                        ? AnyTransition.identity
+                        : AnyTransition.opacity.combined(with: .scale(scale: 0.94, anchor: .top)))
         }
+    }
+
+    /// The insight card's removal animation; `nil` (instant) under Reduce Motion.
+    fileprivate var whoopInsightDismissAnimation: Animation? {
+        reduceMotion ? nil : Animation.spring(response: 0.38, dampingFraction: 0.86)
     }
 
     // MARK: My Day + Coach
@@ -3842,11 +3927,12 @@ extension LiquidTodayView {
             .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(WhoopHomeStyle.askBar))
             .contentShape(Rectangle())
         }
-        .buttonStyle(LiquidPressStyle())
+        .buttonStyle(NoopPressableCardStyle())
     }
 }
 
-/// Header strap status: "87%" + a strap glyph with a status dot. Same honest resolution as
+/// Header strap status: a compact pill (the streak chip's height and fill) holding "87%", or "—" when
+/// no reading is known, plus a strap glyph with a status dot. Same honest resolution as
 /// `LiquidBatteryButton` (`StrapBatteryDisplay.resolve`, #2208) and the same tap target (Devices); while
 /// a history offload runs it shows a small spinner instead of the percentage.
 fileprivate struct WhoopStrapStatusButton: View {
@@ -3887,33 +3973,42 @@ fileprivate struct WhoopStrapStatusButton: View {
 
     var body: some View {
         Button { router.openDevices() } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: 4) {
                 if syncing {
                     ProgressView()
                         .controlSize(.mini)
                         .tint(Color.white)
-                } else if let percentText {
-                    Text(verbatim: percentText)
-                        .font(.system(size: 13, weight: .semibold))
+                } else {
+                    // The percentage when known; an em dash keeps the pill balanced against the
+                    // streak chip when there is no reading (offline, pending, not the active device).
+                    Text(verbatim: percentText ?? "—")
+                        .font(.system(size: 11, weight: .bold))
                         .monospacedDigit()
-                        .foregroundStyle(WhoopHomeStyle.textSecondary)
+                        .foregroundStyle(percentText == nil ? WhoopHomeStyle.textTertiary : Color.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                 }
                 if charging {
                     Image(systemName: "bolt.fill")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.system(size: 8, weight: .bold))
                         .foregroundStyle(WhoopHomeStyle.textSecondary)
                 }
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: "applewatch.side.right")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Color.white.opacity(0.85))
                     Circle()
                         .fill(dotColor)
-                        .frame(width: 6, height: 6)
-                        .overlay(Circle().strokeBorder(Color.black.opacity(0.6), lineWidth: 1))
-                        .offset(x: 3, y: -2)
+                        .frame(width: 5, height: 5)
+                        .overlay(Circle().strokeBorder(WhoopHomeStyle.streakChip, lineWidth: 1))
+                        .offset(x: 2, y: -1)
                 }
             }
+            .padding(.leading, 9)
+            .padding(.trailing, 9)
+            .frame(height: 21)
+            .background(Capsule().fill(WhoopHomeStyle.streakChip))
+            // Full header-height tap target around the 21pt pill.
             .frame(height: 31)
             .contentShape(Rectangle())
         }

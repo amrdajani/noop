@@ -270,6 +270,11 @@ struct CoupledView: View {
     /// Today hero pill chrome. Reuses TodayView's word + level colour so the read stays consistent.
     private func readinessPill(_ word: String) -> some View {
         let tint = readinessTint(readinessLevel)
+        #if os(iOS)
+        return Text(word.uppercased())
+            .noopStatusPill(tint)
+            .accessibilityLabel("Readiness: \(word)")
+        #else
         return Text(word.uppercased())
             .font(StrandFont.overline)
             .tracking(StrandFont.overlineTracking)
@@ -278,6 +283,7 @@ struct CoupledView: View {
             .background(Capsule(style: .continuous).fill(tint.opacity(0.12)))
             .overlay(Capsule(style: .continuous).stroke(tint.opacity(0.32), lineWidth: 1))
             .accessibilityLabel("Readiness: \(word)")
+        #endif
     }
 
     /// The readiness level's tint, the SAME mapping TodayView.readinessColor uses.

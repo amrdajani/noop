@@ -177,7 +177,9 @@ struct AddDeviceWizard: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            #if !os(iOS)
             Divider().overlay(StrandPalette.hairline)
+            #endif
             ScrollView {
                 VStack(alignment: .leading, spacing: NoopMetrics.gap) {
                     if type == .oura {
@@ -202,7 +204,12 @@ struct AddDeviceWizard: View {
             #endif
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        #if os(iOS)
+        // WHOOP-style guided flow: the slate page gradient behind large centred content.
+        .background { NoopPageBackground().ignoresSafeArea() }
+        #else
         .background(StrandPalette.surfaceBase)
+        #endif
         // Stop whichever scan is live whenever the sheet goes away (belt-and-braces alongside the
         // per-transition stops below) so neither central keeps scanning after dismiss.
         .onDisappear { stopAllScans() }
@@ -244,6 +251,54 @@ struct AddDeviceWizard: View {
 
     // MARK: Header
 
+    #if os(iOS)
+    /// iOS (WHOOP-style): a centred UPPERCASE tracked headline with the 16pt subtitle beneath; Back and
+    /// Close float as small chip circles in the top corners. Same titles, same actions.
+    private var header: some View {
+        VStack(spacing: 8) {
+            Text(headerTitle)
+                .noopFirstRunHeadline()
+            if let sub = headerSubtitle {
+                Text(sub)
+                    .noopFirstRunSubtitle()
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 56)
+        .padding(.top, 30)
+        .padding(.bottom, 16)
+        .overlay(alignment: .topLeading) {
+            // Back is offered on every step except the very first (the type list), AND, on the Oura
+            // adopt flow, except the Adopting progress (see `showBack`).
+            if showBack {
+                Button(action: goBack) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(StrandPalette.textSecondary)
+                        .frame(width: 32, height: 32)
+                        .background(Circle().fill(NoopWhoop.chip))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Back")
+                .padding(.top, 16)
+                .padding(.leading, NoopWhoop.pageMargin)
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            Button(action: { stopAllScans(); onClose() }) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(StrandPalette.textSecondary)
+                    .frame(width: 32, height: 32)
+                    .background(Circle().fill(NoopWhoop.chip))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Close")
+            .padding(.top, 16)
+            .padding(.trailing, NoopWhoop.pageMargin)
+        }
+    }
+    #else
     private var header: some View {
         HStack(spacing: 12) {
             // Back is offered on every step except the very first (the type list), AND, on the Oura adopt
@@ -277,6 +332,7 @@ struct AddDeviceWizard: View {
         }
         .padding(20)
     }
+    #endif
 
     /// Back is shown on every step except the very first (the type list) and, on the Oura adopt flow, the
     /// Adopting progress (no back while a key install is in flight). Parity with the Android `showBack`.
@@ -459,8 +515,7 @@ struct AddDeviceWizard: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(StrandPalette.accent)
+                .noopFlowCTA()
                 .accessibilityLabel("Scan for \(typeTitle(type))")
             }
         }
@@ -617,8 +672,7 @@ struct AddDeviceWizard: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)
         }
-        .buttonStyle(.borderedProminent)
-        .tint(StrandPalette.accent)
+        .noopFlowCTA()
         .disabled(!ouraConsented)
         .accessibilityHint("Continue to get your ring ready")
 
@@ -698,8 +752,7 @@ struct AddDeviceWizard: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)
         }
-        .buttonStyle(.borderedProminent)
-        .tint(StrandPalette.accent)
+        .noopFlowCTA()
         .accessibilityLabel("Scan for your Oura ring")
     }
 
@@ -756,8 +809,7 @@ struct AddDeviceWizard: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)
         }
-        .buttonStyle(.borderedProminent)
-        .tint(StrandPalette.accent)
+        .noopFlowCTA()
         .disabled(ouraKeyBytes == nil)
         .accessibilityLabel("Scan for your Oura ring")
 
@@ -855,8 +907,7 @@ struct AddDeviceWizard: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(StrandPalette.accent)
+                .noopFlowCTA()
                 .accessibilityLabel("Connect to this ring")
                 Text("Both NOOP and the Oura app can use a ring you own by key, but only one can hold the Bluetooth link at a time.")
                     .font(StrandFont.footnote)
@@ -929,8 +980,7 @@ struct AddDeviceWizard: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(StrandPalette.accent)
+                .noopFlowCTA()
                 .accessibilityLabel("Try again")
 
                 Button {
@@ -1138,8 +1188,7 @@ struct AddDeviceWizard: View {
                 .accessibilityLabel("Device name")
 
             Button("Add") { askMakeActive = true }
-                .buttonStyle(.borderedProminent)
-                .tint(StrandPalette.accent)
+                .noopFlowCTA()
                 .frame(maxWidth: .infinity)
                 .disabled(nameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .padding(.top, 4)
@@ -1626,8 +1675,7 @@ private struct OuraPickList: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Button("Use file import") { onUseImport() }
-                        .buttonStyle(.borderedProminent)
-                        .tint(StrandPalette.accent)
+                        .noopFlowCTA()
                         .accessibilityLabel("Use file import for Oura")
                 }
                 .padding(16)

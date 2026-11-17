@@ -183,6 +183,15 @@ struct ComingSoon: View {
     let what: LocalizedStringKey
     var symbol: String = "sparkles"
     var body: some View {
+        #if os(iOS)
+        // The one iOS empty state: centred 28pt symbol, 15pt semibold title, 13pt caption, no box.
+        NoopEmptyState(symbol: symbol, title: "Coming together", message: what)
+        #else
+        legacyBody
+        #endif
+    }
+
+    private var legacyBody: some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: symbol)
                 .font(StrandFont.headline)

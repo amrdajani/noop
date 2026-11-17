@@ -25,6 +25,35 @@ public enum StrandTone: Sendable {
     }
 }
 
+// MARK: - The one status-pill look (iOS WHOOP-style)
+
+/// The single small status-pill treatment used across the iOS app ("Paired", "Active", "BETA",
+/// "HIGH", "Calibrating" ...): a capsule filled with the status colour at 16%, a 10.5pt heavy
+/// UPPERCASE label tracked 1.2 in the status colour, and no stroke.
+public enum NoopStatusPillStyle {
+    public static let font = Font.system(size: 10.5, weight: .heavy, design: .default)
+    public static let tracking: CGFloat = 1.2
+    public static let fillOpacity: Double = 0.16
+    public static let horizontalPadding: CGFloat = 8
+    public static let verticalPadding: CGFloat = 4
+}
+
+public extension View {
+    /// Style this label (a `Text`, or an `HStack` of dot + text) as the shared status pill in
+    /// `color`. Use for ad-hoc chips so they match `StatePill` exactly.
+    func noopStatusPill(_ color: Color) -> some View {
+        self
+            .font(NoopStatusPillStyle.font)
+            .tracking(NoopStatusPillStyle.tracking)
+            .textCase(.uppercase)
+            .lineLimit(1)
+            .foregroundStyle(color)
+            .padding(.horizontal, NoopStatusPillStyle.horizontalPadding)
+            .padding(.vertical, NoopStatusPillStyle.verticalPadding)
+            .background(Capsule(style: .continuous).fill(color.opacity(NoopStatusPillStyle.fillOpacity)))
+    }
+}
+
 public struct StatePill: View {
 
     public var title: LocalizedStringKey
@@ -41,6 +70,22 @@ public struct StatePill: View {
     }
 
     public var body: some View {
+        #if os(iOS)
+        HStack(spacing: 5) {
+            if showsDot {
+                ConnectionDot(tone: tone, pulsing: pulsing, size: 6)
+            }
+            Text(title)
+        }
+        .noopStatusPill(tone.color)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        #else
+        legacyBody
+        #endif
+    }
+
+    private var legacyBody: some View {
         HStack(spacing: 6) {
             if showsDot {
                 ConnectionDot(tone: tone, pulsing: pulsing, size: 7)
@@ -109,7 +154,8 @@ public struct ConnectionDot: View {
             Circle()
                 .fill(tone.color)
                 .frame(width: size, height: size)
-                .shadow(color: tone.color.opacity(0.8), radius: pulsing ? 4 : 2)
+                // iOS is flat (no glow); macOS / watchOS keep the soft halo.
+                .noopLegacyShadow(color: tone.color.opacity(0.8), radius: pulsing ? 4 : 2)
         }
         .frame(width: size, height: size)
         // Honour the quiet-motion gate (system Reduce Motion, Low Power Mode, or the in-app

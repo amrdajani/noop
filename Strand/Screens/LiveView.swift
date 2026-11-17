@@ -283,6 +283,14 @@ struct LiveView: View {
             : live.connected ? (String(localized: "Connected"), StrandPalette.statusWarning)
             : live.encryptedBond ? (String(localized: "Paired · idle"), StrandPalette.statusWarning)
             : (String(localized: "Disconnected"), StrandPalette.metricRose)
+        #if os(iOS)
+        // The shared status pill, in the connection state's colour.
+        return HStack(spacing: 5) {
+            Circle().fill(color).frame(width: 6, height: 6)
+            Text(label)
+        }
+        .noopStatusPill(color)
+        #else
         return HStack(spacing: 8) {
             Circle().fill(color).frame(width: 9, height: 9)
             Text(label).font(StrandFont.subhead).foregroundStyle(StrandPalette.textPrimary)
@@ -290,6 +298,7 @@ struct LiveView: View {
         .padding(.horizontal, 14).padding(.vertical, 8)
         .background(StrandPalette.surfaceInset, in: Capsule())
         .overlay(Capsule().strokeBorder(StrandPalette.hairline, lineWidth: 1))
+        #endif
     }
 
     // MARK: - Body console (live BPM vessel + live physiology)

@@ -18,6 +18,7 @@ import SwiftUI
 /// The four button roles. Colour + emphasis differ; geometry is identical across all four.
 public enum NoopButtonKind: Sendable {
     /// Filled accent (blue), white label — the one primary action on a screen.
+    /// (iOS: the WHOOP outline capsule with an UPPERCASE tracked label.)
     case primary
     /// Raised-surface fill, primary-text label, hairline edge — secondary actions.
     case secondary
@@ -97,13 +98,13 @@ private struct NoopButtonBackground: View {
         let shape = RoundedRectangle(cornerRadius: NoopButtonMetrics.cornerRadius, style: .continuous)
         ZStack {
             if appearance.usesPanelSurface {
-                NoopPanelSurface(cornerRadius: NoopButtonMetrics.cornerRadius)
+            NoopPanelSurface(cornerRadius: NoopButtonMetrics.cornerRadius)
             }
             if let fill = appearance.fill {
-                shape.fill(fill)
+            shape.fill(fill)
             }
             if let border = appearance.border {
-                shape.strokeBorder(border, lineWidth: 1)
+            shape.strokeBorder(border, lineWidth: 1)
             }
         }
     }
@@ -132,6 +133,69 @@ public struct NoopButtonStyle: ButtonStyle {
         let scale: CGFloat = (pressed && !reduceMotion) ? NoopButtonMetrics.pressedScale : 1
         let opacity: Double = pressed ? NoopButtonMetrics.pressedOpacity : 1
 
+        #if os(iOS)
+        // iOS (WHOOP-style): the primary action is the outline capsule CTA (2pt outline, transparent
+        // fill, UPPERCASE bold tracked label); secondary is a flat chip-filled capsule; destructive is
+        // a flat critical-filled capsule. Tertiary stays a bare accent label. Geometry (height, hit
+        // target, fullWidth) is unchanged so no call site has to move.
+        let capsule = Capsule(style: .continuous)
+        switch kind {
+        case .primary:
+            configuration.label
+            .labelStyle(.titleAndIcon)
+            .font(StrandFont.ctaLabel)
+            .tracking(NoopWhoop.ctaTracking)
+            .textCase(.uppercase)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .foregroundStyle(StrandPalette.textPrimary)
+            .frame(maxWidth: fullWidth ? .infinity : nil)
+            .padding(.horizontal, NoopButtonMetrics.hPadding + 4)
+            .frame(height: NoopButtonMetrics.height)
+            .frame(minHeight: NoopButtonMetrics.minHitTarget)
+            .background(capsule.fill(StrandPalette.textPrimary.opacity(pressed ? 0.10 : 0)))
+            .overlay(capsule.strokeBorder(StrandPalette.textPrimary, lineWidth: 2))
+            .contentShape(capsule)
+            .opacity(isEnabled ? opacity : NoopButtonMetrics.disabledOpacity)
+            .scaleEffect(scale)
+            .animation(reduceMotion ? nil : StrandMotion.interactive, value: pressed)
+        case .secondary, .destructive:
+            configuration.label
+            .labelStyle(.titleAndIcon)
+            .font(StrandFont.headline.weight(.semibold))
+            .tracking(NoopButtonMetrics.tracking)
+            .lineLimit(1)
+            .minimumScaleFactor(0.9)
+            .foregroundStyle(appearance.label)
+            .frame(maxWidth: fullWidth ? .infinity : nil)
+            .padding(.horizontal, NoopButtonMetrics.hPadding + 4)
+            .frame(height: NoopButtonMetrics.height)
+            .frame(minHeight: NoopButtonMetrics.minHitTarget)
+            .background(capsule.fill(kind == .destructive ? StrandPalette.statusCritical : NoopWhoop.chip))
+            .contentShape(capsule)
+            .opacity(isEnabled ? opacity : NoopButtonMetrics.disabledOpacity)
+            .scaleEffect(scale)
+            .animation(reduceMotion ? nil : StrandMotion.interactive, value: pressed)
+        case .tertiary:
+            configuration.label
+                .labelStyle(.titleAndIcon)
+                .font(StrandFont.headline.weight(.semibold))
+                .tracking(NoopButtonMetrics.tracking)
+                .lineLimit(1)
+                .minimumScaleFactor(0.9)
+                .foregroundStyle(appearance.label)
+                .frame(maxWidth: fullWidth ? .infinity : nil)
+                .padding(.horizontal, NoopButtonMetrics.hPadding)
+                .frame(height: NoopButtonMetrics.height)
+                .frame(minHeight: NoopButtonMetrics.minHitTarget)
+                .contentShape(Rectangle())
+                .background(NoopButtonBackground(appearance: appearance))
+                .clipShape(RoundedRectangle(cornerRadius: NoopButtonMetrics.cornerRadius, style: .continuous))
+                .opacity(isEnabled ? opacity : NoopButtonMetrics.disabledOpacity)
+                .scaleEffect(scale)
+                .animation(reduceMotion ? nil : StrandMotion.interactive, value: pressed)
+        }
+        #else
         configuration.label
             .labelStyle(.titleAndIcon)
             .font(StrandFont.headline.weight(.semibold))
@@ -149,6 +213,7 @@ public struct NoopButtonStyle: ButtonStyle {
             .opacity(isEnabled ? opacity : NoopButtonMetrics.disabledOpacity)
             .scaleEffect(scale)
             .animation(reduceMotion ? nil : StrandMotion.interactive, value: pressed)
+        #endif
     }
 }
 

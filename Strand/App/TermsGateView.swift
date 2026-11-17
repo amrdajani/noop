@@ -14,9 +14,25 @@ struct TermsGateView: View {
 
     var body: some View {
         ZStack {
+            #if os(iOS)
+            // WHOOP-style first-run: the slate page gradient, a centred uppercase tracked headline.
+            NoopPageBackground().ignoresSafeArea()
+            #else
             StrandPalette.surfaceBase.ignoresSafeArea()
+            #endif
 
             VStack(spacing: 0) {
+                #if os(iOS)
+                VStack(spacing: 10) {
+                    Text("Before you use NOOP")
+                        .noopFirstRunHeadline()
+                    Text("Please read the points below, then confirm each statement.")
+                        .noopFirstRunSubtitle()
+                }
+                .padding(.horizontal, NoopFirstRun.margin)
+                .padding(.top, 36)
+                .padding(.bottom, 22)
+                #else
                 VStack(spacing: 6) {
                     Text("Before you use NOOP")
                         .font(StrandFont.title1)
@@ -28,6 +44,7 @@ struct TermsGateView: View {
                 }
                 .padding(.top, 36)
                 .padding(.bottom, 22)
+                #endif
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
@@ -49,6 +66,30 @@ struct TermsGateView: View {
                             .frame(height: 1)
                             .padding(.vertical, 2)
 
+                        #if os(iOS)
+                        NoopSectionLabel("Please confirm each of these:")
+
+                        // One flat card; a 52pt row per statement, white-8% dividers, accent switches.
+                        VStack(spacing: 0) {
+                            ForEach(Array(Terms.attestations.enumerated()), id: \.offset) { idx, line in
+                                if idx > 0 {
+                                    Rectangle().fill(NoopWhoop.divider).frame(height: 1)
+                                        .padding(.leading, NoopWhoop.cardPadding)
+                                }
+                                Toggle(isOn: Binding(get: { checks[idx] }, set: { checks[idx] = $0 })) {
+                                    Text(line)
+                                        .font(StrandFont.footnote)
+                                        .foregroundStyle(StrandPalette.textPrimary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                .tint(StrandPalette.accent)
+                                .padding(.horizontal, NoopWhoop.cardPadding)
+                                .padding(.vertical, 10)
+                                .frame(minHeight: 52)
+                            }
+                        }
+                        .noopWhoopCard(padding: 0)
+                        #else
                         Text("Please confirm each of these:")
                             .font(StrandFont.subhead)
                             .foregroundStyle(StrandPalette.textSecondary)
@@ -64,13 +105,18 @@ struct TermsGateView: View {
                             .toggleStyle(.checkbox)   // iOS falls back to the default switch toggle
                             #endif
                         }
+                        #endif
 
                         Text("The full terms are in TERMS.md, shipped with NOOP. This is not legal advice.")
                             .font(StrandFont.footnote)
                             .foregroundStyle(StrandPalette.textTertiary)
                             .padding(.top, 2)
                     }
+                    #if os(iOS)
+                    .padding(.horizontal, NoopFirstRun.margin)
+                    #else
                     .padding(.horizontal, 30)
+                    #endif
                     .padding(.bottom, 18)
                 }
                 #if os(iOS)
@@ -79,6 +125,18 @@ struct TermsGateView: View {
                 .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
                 #endif
 
+                #if os(iOS)
+                // Full-width outline capsule CTA near the bottom; dimmed until every box is ticked.
+                Button(action: onAccept) {
+                    Text("Accept & Continue")
+                }
+                .noopFlowCTA()
+                .disabled(!allChecked)
+                .keyboardShortcut(.defaultAction)
+                .padding(.horizontal, NoopFirstRun.margin)
+                .padding(.top, 14)
+                .padding(.bottom, 20)
+                #else
                 Rectangle()
                     .fill(StrandPalette.hairline)
                     .frame(height: 1)
@@ -94,6 +152,7 @@ struct TermsGateView: View {
                 .disabled(!allChecked)
                 .keyboardShortcut(.defaultAction)
                 .padding(26)
+                #endif
             }
             .frame(maxWidth: 560, maxHeight: 720)
         }

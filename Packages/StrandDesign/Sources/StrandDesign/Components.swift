@@ -186,7 +186,15 @@ public struct SectionHeader: View {
                 if let overline {
                     Text(overline).font(StrandFont.caption).foregroundStyle(StrandPalette.textTertiary)
                 }
-                NoopSectionLabel(title)
+                // One style for every header above a card group: 12pt heavy, tracking 2, #A6ADB3.
+                Text(title)
+                    .font(.system(.caption, design: .default, weight: .heavy))
+                    .tracking(NoopWhoop.labelTracking)
+                    .textCase(.uppercase)
+                    .foregroundStyle(NoopWhoop.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .accessibilityAddTraits(.isHeader)
             }
             Spacer()
             if let trailing {
@@ -589,11 +597,21 @@ public struct SourceBadge: View {
         // `.frame(height:)` centres its content by default, so the label sits mid-capsule for free. Noted
         // because the Android twin pinned the same 18 with `heightIn` applied to the label itself, which
         // top-aligns — same number, different render. That one is matched to this, not the reverse.
+        #if os(iOS)
+        // iOS: the shared status-pill look (16% fill, 10.5pt heavy uppercase, tracking 1.2, no stroke),
+        // pinned to the same canonical badge height.
+        Text(text).textCase(.uppercase).font(NoopStatusPillStyle.font).tracking(NoopStatusPillStyle.tracking)
+            .lineLimit(1)
+            .padding(.horizontal, NoopStatusPillStyle.horizontalPadding).frame(height: NoopMetrics.sourceBadgeHeight)
+            .background(tint.opacity(NoopStatusPillStyle.fillOpacity), in: Capsule(style: .continuous))
+            .foregroundStyle(tint)
+        #else
         Text(text).textCase(.uppercase).font(.system(size: 10, weight: .semibold, design: .rounded)).tracking(0.5)
             .padding(.horizontal, 9).frame(height: NoopMetrics.sourceBadgeHeight)
             .background(tint.opacity(0.16), in: Capsule(style: .continuous))
             .foregroundStyle(tint)
             .overlay(Capsule(style: .continuous).strokeBorder(tint.opacity(0.34), lineWidth: 1))
+        #endif
     }
 }
 
@@ -763,6 +781,16 @@ public struct ScoreStatePill: View {
     }
     public var body: some View {
         let hue = state.color
+        #if os(iOS)
+        // iOS: the shared status-pill look (see `NoopStatusPillStyle`), no stroke.
+        return HStack(spacing: 5) {
+            PulseDot(color: hue, pulsing: state.pulsing, size: 6)
+            Text(text ?? state.label)
+        }
+        .noopStatusPill(hue)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(text ?? state.label)
+        #else
         return HStack(spacing: 6) {
             PulseDot(color: hue, pulsing: state.pulsing, size: 7)
             Text(text ?? state.label)
@@ -775,6 +803,7 @@ public struct ScoreStatePill: View {
         .overlay(Capsule(style: .continuous).stroke(hue.opacity(0.32), lineWidth: 1))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(text ?? state.label)
+        #endif
     }
 }
 
@@ -809,7 +838,7 @@ private struct PulseDot: View {
             }
             Circle().fill(color)
                 .frame(width: size, height: size)
-                .shadow(color: color.opacity(0.8), radius: pulsing ? 4 : 2)
+                .noopLegacyShadow(color: color.opacity(0.8), radius: pulsing ? 4 : 2)
         }
         .frame(width: size, height: size)
         .onAppear { if pulsing && !poseStill { animate = true } }

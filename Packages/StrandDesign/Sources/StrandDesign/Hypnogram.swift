@@ -262,7 +262,7 @@ public struct Hypnogram: View {
                                         p.move(to: CGPoint(x: x, y: 0))
                                         p.addLine(to: CGPoint(x: x, y: geo.size.height))
                                     }
-                                    .stroke(StrandPalette.hairline.opacity(0.4), lineWidth: 1)
+                                    .stroke(NoopChartStyle.grid, lineWidth: 1)
                                 }
                             }
 
@@ -348,8 +348,8 @@ public struct Hypnogram: View {
                         Text(timeLabel(origin + span / 2)).frame(maxWidth: .infinity, alignment: .center)
                         Text(timeLabel(origin + span)).frame(maxWidth: .infinity, alignment: .trailing)
                     }
-                    .font(StrandFont.footnote)
-                    .foregroundStyle(StrandPalette.textTertiary)
+                    .font(NoopChartStyle.axisFont)
+                    .foregroundStyle(NoopChartStyle.axisLabel)
                     .accessibilityHidden(true)
                 }
             }
@@ -378,8 +378,8 @@ public struct Hypnogram: View {
         VStack(alignment: .trailing, spacing: 0) {
             ForEach(stagesTopToBottom, id: \.self) { stage in
                 Text(stage.label)
-                    .font(StrandFont.footnote)
-                    .foregroundStyle(StrandPalette.textTertiary)
+                    .font(NoopChartStyle.axisFont)
+                    .foregroundStyle(NoopChartStyle.axisLabel)
                     .frame(maxHeight: .infinity, alignment: .center)
             }
         }

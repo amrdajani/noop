@@ -80,15 +80,17 @@ public struct PipBar: View {
 
     public var body: some View {
         // Gap scales with height so the bar reads consistently at any size; pips stay rounded (rx ~2.5).
-        let gap: CGFloat = max(2, height * 0.28)
-        let corner: CGFloat = 2.5
+        // iOS (WHOOP-style): a flat 4pt bar with fully rounded pips on the #353C42 track.
+        let barHeight = NoopChartStyle.barHeight(height)
+        let gap: CGFloat = max(2, barHeight * 0.28)
+        let corner: CGFloat = Self.pipCorner(barHeight: barHeight)
 
         // Precompute the three constant colours ONCE per body eval rather than re-deriving them inside
         // every one of the (default 24) segment closures: the inset track, the plain tint, and the
         // brightened lead-edge tint (which itself runs an interpolate → Color(hex:) allocation). Combined
         // with the Palette memoization this removes the per-segment colour allocations across the bar.
-        let track = StrandPalette.surfaceInset
-        let leadBase = brighten(tint)
+        let track = NoopChartStyle.barTrack
+        let leadBase = Self.flatLead ? tint : brighten(tint)
 
         HStack(spacing: gap) {
             ForEach(0..<pipCount, id: \.self) { index in
@@ -96,7 +98,7 @@ public struct PipBar: View {
                     .fill(fillStyle(for: index, track: track, leadBase: leadBase))
             }
         }
-        .frame(height: height)
+        .frame(height: barHeight)
         .onAppear {
             // Count-up on first appear (or snap when quiet motion is on).
             withAnimation(countUp) { animatedFraction = targetFraction }
@@ -144,6 +146,24 @@ public struct PipBar: View {
         // Partially-covered pip (the moving front of the cascade): blend track → fill by coverage so the
         // sweep edge is smooth, not stepped. Fully covered pips are the solid fill.
         return local >= 1 ? base : StrandPalette.interpolate(track, base, local)
+    }
+
+    /// iOS keeps the fill flat (no brightened lead-edge pip); other platforms keep the highlight.
+    private static var flatLead: Bool {
+        #if os(iOS)
+        return true
+        #else
+        return false
+        #endif
+    }
+
+    /// Pip corner radius: fully rounded on iOS, the classic 2.5 elsewhere.
+    private static func pipCorner(barHeight: CGFloat) -> CGFloat {
+        #if os(iOS)
+        return barHeight / 2
+        #else
+        return 2.5
+        #endif
     }
 
     /// Pure white, built once (not a fresh `Color(hex:)` per `brighten` call).

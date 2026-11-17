@@ -57,11 +57,21 @@ jobs:
           xcrun simctl install "$UDID" "$APP"
           xcrun simctl status_bar "$UDID" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularBars 4 || true
           mkdir -p shots
+          # First-run flow on the fresh install, before anything is seeded.
+          # (a) No arguments: the Terms acknowledgment gate.
+          xcrun simctl launch "$UDID" "$BID"; sleep 12
+          xcrun simctl io "$UDID" screenshot shots/first-run-terms.png
+          xcrun simctl terminate "$UDID" "$BID" || true
+          # (b) Terms marked accepted through the UserDefaults argument domain (Terms.currentVersion),
+          #     so the onboarding wizard shows. Nothing is persisted by this override.
+          xcrun simctl launch "$UDID" "$BID" -noop.acceptedTermsVersion 2.0; sleep 12
+          xcrun simctl io "$UDID" screenshot shots/first-run-onboarding.png
+          xcrun simctl terminate "$UDID" "$BID" || true
           # Seed once (first launch populates the store), then capture.
           xcrun simctl launch "$UDID" "$BID" --demo-seed -theme.appearance dark; sleep 25
           xcrun simctl io "$UDID" screenshot shots/00-shell.png
           xcrun simctl terminate "$UDID" "$BID" || true
-          for s in liquidtoday trends sleep live stress workouts health insights explore compare settings devices fitnessage vitality chargebreakdown; do
+          for s in liquidtoday trends sleep live stress workouts health insights explore compare settings devices fitnessage vitality chargebreakdown addwizard whatsnew terms onboarding coach intelligence hydration breathing alarms insightshub labbook datasources automations; do
             xcrun simctl launch "$UDID" "$BID" --demo-seed --demo-screen "$s" -theme.appearance dark; sleep 12
             xcrun simctl io "$UDID" screenshot "shots/$s.png"
             xcrun simctl terminate "$UDID" "$BID" || true

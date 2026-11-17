@@ -83,14 +83,14 @@ private struct WorkoutTimeAxisModifier: ViewModifier {
                 .chartXScale(domain: range)
                 .chartXAxis {
                 AxisMarks(values: .automatic(desiredCount: 5)) { value in
-                    AxisGridLine().foregroundStyle(StrandPalette.hairline.opacity(0.4))
+                    AxisGridLine().foregroundStyle(NoopChartStyle.grid)
                     AxisValueLabel {
                         if let date = value.as(Date.self) {
                             Text(elapsedLabel(date, start: range.lowerBound))
                         }
                     }
-                    .foregroundStyle(StrandPalette.textTertiary)
-                    .font(StrandFont.footnote)
+                    .foregroundStyle(NoopChartStyle.axisLabel)
+                    .font(NoopChartStyle.axisFont)
                 }
             }
         } else {
@@ -375,7 +375,7 @@ public struct TrendChart: View {
                         series: .value("Segment", p.segment)
                     )
                     .interpolationMethod(.catmullRom)
-                    .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                    .lineStyle(StrokeStyle(lineWidth: NoopChartStyle.lineWidth, lineCap: .round, lineJoin: .round))
                     .foregroundStyle(lineStroke)
                 }
                 // 18pt dots are invisible on dense series (e.g. a 365-day year) but still cost the
@@ -423,10 +423,10 @@ public struct TrendChart: View {
         // day-only format keeps a mark from ever printing a time as well.
         .chartXAxis {
             AxisMarks(values: axisDays) { _ in
-                AxisGridLine().foregroundStyle(StrandPalette.hairline.opacity(0.4))
+                AxisGridLine().foregroundStyle(NoopChartStyle.grid)
                 AxisValueLabel(format: ChartAxisDays.labelFormat(for: axisDays))
-                    .foregroundStyle(StrandPalette.textTertiary)
-                    .font(StrandFont.footnote)
+                    .foregroundStyle(NoopChartStyle.axisLabel)
+                    .font(NoopChartStyle.axisFont)
             }
         }
         .modifier(WorkoutTimeAxisModifier(workoutTimeAxis))
@@ -440,15 +440,15 @@ public struct TrendChart: View {
                     AxisValueLabel {
                         if let number = value.as(Double.self) {
                             Text(TrendChart.axisNumberLabel(number))
-                                .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
+                                .font(NoopChartStyle.axisFont).foregroundStyle(NoopChartStyle.axisLabel)
                         }
                     }
                 }
             } else {
             AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { _ in
-                AxisGridLine().foregroundStyle(StrandPalette.hairline.opacity(0.4))
-                AxisValueLabel().foregroundStyle(StrandPalette.textTertiary)
-                    .font(StrandFont.footnote)
+                AxisGridLine().foregroundStyle(NoopChartStyle.grid)
+                AxisValueLabel().foregroundStyle(NoopChartStyle.axisLabel)
+                    .font(NoopChartStyle.axisFont)
             }
             }
         }

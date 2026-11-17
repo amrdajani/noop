@@ -162,10 +162,22 @@ public struct NoopScoreRing: View {
     private let color: Color
     private let lineWidth: CGFloat
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// True only for the instant before the first-appear sweep: the arc is held at 0, then released
+    /// with the draw-in animation. Starts false so a ring that never gets `onAppear` (an off-screen
+    /// `ImageRenderer` export, a widget snapshot) still renders its real value.
+    @State private var holdsAtZero = false
+    @State private var didDrawIn = false
+
     public init(progress: Double, color: Color, lineWidth: CGFloat = 5.5) {
         self.progress = progress
         self.color = color
         self.lineWidth = lineWidth
+    }
+
+    /// The arc sweep: ease-out over ~0.9s. `nil` (no animation) under Reduce Motion.
+    private var sweep: Animation? {
+        reduceMotion ? nil : Animation.easeOut(duration: 0.9)
     }
 
     private var clamped: Double {
@@ -179,12 +191,31 @@ public struct NoopScoreRing: View {
             Circle()
                 .stroke(NoopWhoop.track, style: style)
             Circle()
-                .trim(from: 0, to: CGFloat(clamped))
+                .trim(from: 0, to: holdsAtZero ? 0 : CGFloat(clamped))
                 .stroke(color, style: style)
                 .rotationEffect(.degrees(-90))
         }
         .padding(lineWidth / 2)
+        // A changed value sweeps to its new position.
+        .animation(sweep, value: clamped)
+        .onAppear { drawInIfNeeded() }
         .accessibilityHidden(true)
+    }
+
+    /// First appearance: sweep the arc from 0 to its value, once. Skipped under Reduce Motion and
+    /// when the ring starts empty (a caller that drives its own draw-in passes 0 first; the value
+    /// change is then animated by the modifier above).
+    private func drawInIfNeeded() {
+        guard !didDrawIn else { return }
+        didDrawIn = true
+        guard !reduceMotion, clamped > 0 else { return }
+        let animation = Animation.easeOut(duration: 0.9)
+        DispatchQueue.main.async {
+            holdsAtZero = true
+            DispatchQueue.main.async {
+                withAnimation(animation) { holdsAtZero = false }
+            }
+        }
     }
 }
 
@@ -251,6 +282,31 @@ public struct NoopOutlineButtonStyle: ButtonStyle {
     }
 }
 
+/// Press feedback for a tappable card or row: a small settle inward (scale 0.98) plus a slight dim.
+/// The label is left untouched otherwise, so the caller keeps its own fill, padding and shape. Under
+/// Reduce Motion the scale is dropped and the dim applies without animation.
+public struct NoopPressableCardStyle: ButtonStyle {
+    public init() {}
+
+    public func makeBody(configuration: Configuration) -> some View {
+        NoopPressableCardBody(label: configuration.label, pressed: configuration.isPressed)
+    }
+}
+
+/// The body of `NoopPressableCardStyle`, a view so it can read the Reduce Motion setting.
+private struct NoopPressableCardBody<Content: View>: View {
+    let label: Content
+    let pressed: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        label
+            .scaleEffect(pressed && !reduceMotion ? 0.98 : 1)
+            .opacity(pressed ? 0.86 : 1)
+            .animation(reduceMotion ? nil : Animation.easeOut(duration: 0.16), value: pressed)
+    }
+}
+
 /// The WHOOP small square action button: white fill, 10pt corners, black glyph.
 public struct NoopSquareActionButtonStyle: ButtonStyle {
     public var size: CGFloat
@@ -276,6 +332,11 @@ public struct NoopSquareActionButtonStyle: ButtonStyle {
 public extension ButtonStyle where Self == NoopOutlineButtonStyle {
     /// WHOOP capsule-outline primary CTA.
     static var noopOutline: NoopOutlineButtonStyle { .init() }
+}
+
+public extension ButtonStyle where Self == NoopPressableCardStyle {
+    /// Press feedback for tappable cards and rows (scale 0.98 + slight dim).
+    static var noopPressableCard: NoopPressableCardStyle { .init() }
 }
 
 public extension ButtonStyle where Self == NoopSquareActionButtonStyle {

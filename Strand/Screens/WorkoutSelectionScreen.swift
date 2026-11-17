@@ -136,6 +136,13 @@ struct WorkoutSelectionScreen: View {
         }
     }
 
+    #if os(iOS)
+    private var emptyResults: some View {
+        NoopEmptyState(symbol: "magnifyingglass",
+                       title: "No workouts found",
+                       message: "Try a different activity name.")
+    }
+    #else
     private var emptyResults: some View {
         VStack(spacing: NoopMetrics.space3) {
             Image(systemName: "magnifyingglass")
@@ -152,6 +159,7 @@ struct WorkoutSelectionScreen: View {
         .padding(.vertical, NoopMetrics.space8)
         .accessibilityElement(children: .combine)
     }
+    #endif
 
     private func select(_ name: String) {
         searchFocused = false

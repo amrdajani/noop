@@ -381,6 +381,13 @@ struct RhythmView: View {
     /// the short `chipLabel` sits in the pill, the sentence `headlineDetail` reads below. Non-diagnostic.
     private var statusChip: some View {
         let label = night?.overall ?? headlineWindow?.label ?? .unreadable
+        #if os(iOS)
+        return HStack(spacing: 5) {
+            Image(systemName: Self.statusIcon(label))
+            Text(chipLabel(label))
+        }
+        .noopStatusPill(StrandPalette.restBright)
+        #else
         return HStack(spacing: 6) {
             Image(systemName: Self.statusIcon(label))
             Text(chipLabel(label))
@@ -391,6 +398,7 @@ struct RhythmView: View {
         .padding(.vertical, 7)
         .background(StrandPalette.restColor.opacity(0.16), in: Capsule(style: .continuous))
         .overlay(Capsule(style: .continuous).strokeBorder(StrandPalette.restColor.opacity(0.34), lineWidth: 1))
+        #endif
     }
 
     /// The SHORT neutral status word inside the chip (the sentence-length `headlineDetail` reads below).

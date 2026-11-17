@@ -531,12 +531,25 @@ struct SleepView: View {
         let night = heroNight(model)
         let score = performanceScore(for: night)
         VStack(spacing: 0) {
+            #if os(iOS)
+            // Same header as every ScreenScaffold screen: left-aligned 28pt semibold at the 16pt page
+            // margin. The hero bleeds past the scaffold gutters (-16 / -24), so both are restored here.
+            Text("Sleep")
+                .font(StrandFont.screenTitle)
+                .foregroundStyle(StrandPalette.textPrimary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, NoopMetrics.screenHPadding)
+                .padding(.top, 24)
+                .padding(.bottom, 8)
+                .accessibilityAddTraits(.isHeader)
+            #else
             Text("Sleep")
                 .font(StrandFont.rounded(24, weight: .semibold))
                 .foregroundStyle(Color.white.opacity(0.96))
                 .noopLegacyShadow(color: .black.opacity(0.35), radius: 5, y: 1)
                 .padding(.top, 6)
                 .accessibilityAddTraits(.isHeader)
+            #endif
 
             if let score {
                 // Same LiquidVessel gauge as Home (`LiquidTodayView` / `HeroScoreCell`).

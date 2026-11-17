@@ -177,6 +177,41 @@ struct RootTabView: View {
         .accessibilityHidden(keyboardVisible || floatingBarHidden)
     }
 
+    /// Whether the scrim under the floating bar is drawn: only on the liquid Today root, which is a
+    /// dark-only page (pushed screens and the other tabs follow the app theme, where a dark fade would
+    /// be wrong), and only while the bar itself is on screen.
+    private var floatingBarScrimVisible: Bool {
+        liquidTodayEnabled && selectedTab == 0 && tabPaths[0].isEmpty
+            && !floatingBarHidden && !keyboardVisible
+            // The running-session bar sits right above the tab bar; a fade there would dim it.
+            && !liftSession.isActive
+    }
+
+    /// A fade from clear to the page's bottom colour behind the floating bar, so scrolled cards
+    /// dissolve under it instead of clashing with the glass. Purely decorative: never hit-tested,
+    /// hidden from accessibility. It fills the bottom safe area and rises `scrimHeight` above it.
+    private var floatingBarScrim: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            LinearGradient(
+                stops: [
+                    .init(color: NoopTabChromeTokens.pageBottom.opacity(0), location: 0),
+                    .init(color: NoopTabChromeTokens.pageBottom.opacity(0.55), location: 0.5),
+                    .init(color: NoopTabChromeTokens.pageBottom.opacity(0.92), location: 1),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: NoopFloatingTabBarMetrics.scrimHeight + windowSafeAreaBottom)
+        }
+        .frame(maxWidth: .infinity)
+        .ignoresSafeArea(.all, edges: .bottom)
+        .opacity(floatingBarScrimVisible ? 1 : 0)
+        .animation(.easeOut(duration: 0.24), value: floatingBarScrimVisible)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
     /// The anywhere-swipe tab-switch drag (2026-07-02). Held as a property so the attachment site can
     /// enable or disable it through a `GestureMask` instead of attaching it conditionally: a conditional
     /// attachment changes view identity, and this condition toggles on every push and pop, which would
@@ -368,6 +403,10 @@ struct RootTabView: View {
         // too, and the bar stays put while the session bar above comes and goes. Attached AFTER the
         // session-bar inset so that inset does not lift the bar. Keyboard safe area is ignored: the
         // bar stays under the keyboard and fades out, like the system bar did.
+        // The scrim sits in its own overlay BELOW the bar's, so it is behind the bar and above the tabs.
+        .overlay(alignment: .bottom) {
+            floatingBarScrim
+        }
         .overlay(alignment: .bottom) {
             floatingTabBar
                 .ignoresSafeArea(.keyboard, edges: .bottom)
