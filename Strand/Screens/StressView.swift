@@ -730,10 +730,10 @@ private struct StressHeroGauge: View {
                 CountUpText(
                     value: score,
                     format: { StressTrace.formatLevel($0) },
-                    font: StrandFont.rounded(34, weight: .bold),
+                    font: StrandFont.ringNumber(34),
                     color: .white
                 )
-                .shadow(color: .black.opacity(0.5), radius: 6, y: 1)
+                .noopLegacyShadow(color: .black.opacity(0.5), radius: 6, y: 1)
                 Text("of 3")
                     .font(StrandFont.caption)
                     .foregroundStyle(StrandPalette.textSecondary)

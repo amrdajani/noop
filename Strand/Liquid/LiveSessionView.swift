@@ -139,14 +139,24 @@ struct LiveSessionView: View {
     /// in band and active. Long-press toggles the bpm read-out.
     private var ring: some View {
         ZStack {
-            // Thin outer arc: time held in band this session, filling toward 60 min. Same 240° open
-            // geometry as the gauge (start 150°, span 240°) so the two read as one instrument.
+            // Thin outer arc: time held in band this session, filling toward 60 min. Same geometry as the
+            // gauge so the two read as one instrument: on iOS the gauge is a flat full circle from 12
+            // o'clock (WHOOP ring), elsewhere the 240° open gauge (start 150°, span 240°).
+            #if os(iOS)
+            Circle()
+                .trim(from: 0, to: CGFloat(heldFraction))
+                .rotation(.degrees(-90))
+                .stroke(StrandPalette.metricCyan.opacity(0.55),
+                        style: StrokeStyle(lineWidth: 3, lineCap: .butt))
+                .frame(width: ringDiameter + 26, height: ringDiameter + 26)
+            #else
             Circle()
                 .trim(from: 0, to: heldFraction * (240.0 / 360.0))
                 .rotation(.degrees(150))
                 .stroke(StrandPalette.metricCyan.opacity(0.55),
                         style: StrokeStyle(lineWidth: 3, lineCap: .round))
                 .frame(width: ringDiameter + 26, height: ringDiameter + 26)
+            #endif
             BevelGauge(
                 fraction: ringFraction,
                 stops: [Gradient.Stop(color: ringTint.opacity(0.7), location: 0),

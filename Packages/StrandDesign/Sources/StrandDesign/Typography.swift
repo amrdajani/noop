@@ -172,6 +172,16 @@ public enum StrandFont {
     public static func scoreNumber(_ size: CGFloat, weight: Font.Weight = .bold) -> Font {
         Font.system(size: size, weight: weight, design: .default).width(.condensed).monospacedDigit()
     }
+
+    /// The numeral centred inside a score ring / gauge: `scoreNumber` (SF Pro condensed) on iOS, where
+    /// rings follow the WHOOP look, and the house `rounded` numeral on macOS / watchOS (unchanged).
+    public static func ringNumber(_ size: CGFloat, weight: Font.Weight = .bold) -> Font {
+        #if os(iOS)
+        return scoreNumber(size, weight: weight)
+        #else
+        return rounded(size, weight: weight)
+        #endif
+    }
 }
 
 // MARK: - Text helpers

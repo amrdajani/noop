@@ -150,6 +150,14 @@ public struct NoopSectionLabel: View {
 /// clockwise. Butt caps, no glow. `progress` is clamped to 0...1. The ring is inset by half its line
 /// width so the stroke stays inside the frame the caller gives it.
 public struct NoopScoreRing: View {
+    /// The WHOOP ring stroke for a ring of `diameter`: ≈6% of the diameter (5.5pt on the 88pt Today
+    /// ring), never thinner than 2.5pt so small inline rings stay legible, and never thicker than
+    /// `cap` (the stroke the legacy gauge asked for).
+    public static func strokeWidth(forDiameter diameter: CGFloat,
+                                   cap: CGFloat = .greatestFiniteMagnitude) -> CGFloat {
+        min(cap, max(2.5, diameter * 0.0625))
+    }
+
     private let progress: Double
     private let color: Color
     private let lineWidth: CGFloat
@@ -193,6 +201,17 @@ public extension View {
                 RoundedRectangle(cornerRadius: NoopWhoop.cardRadius, style: .continuous)
                     .fill(NoopWhoop.card)
             )
+    }
+
+    /// The legacy Titanium/Liquid depth shadow (e.g. under a score numeral sitting on a ring). The WHOOP
+    /// look is flat, so on iOS this renders nothing; macOS keeps the shadow exactly as before.
+    @ViewBuilder
+    func noopLegacyShadow(color: Color, radius: CGFloat, y: CGFloat = 0) -> some View {
+        #if os(iOS)
+        self
+        #else
+        self.shadow(color: color, radius: radius, x: 0, y: y)
+        #endif
     }
 
     /// An inset chip square (e.g. an icon plate) inside a WHOOP card: `NoopWhoop.chip` fill, 6pt corners.

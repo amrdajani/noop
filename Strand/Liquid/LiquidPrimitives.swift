@@ -17,6 +17,34 @@ enum LiquidRender {
     /// this pass only deepens the material — recessed track, frosted inner disc, semantic progress
     /// gradient — without neon bloom, tip dots, or layout changes.
     static func vessel(_ base: GraphicsContext, _ size: CGSize, _ sim: LiquidSim, now: Double, tint: Color) {
+        #if os(iOS)
+        flatVessel(base, size, level: sim.level, tint: tint)
+        #else
+        legacyVessel(base, size, sim, tint: tint)
+        #endif
+    }
+
+    #if os(iOS)
+    /// iOS (WHOOP re-skin): the vessel is a flat score ring filling the frame — a full-circle
+    /// `NoopWhoop.track` channel plus a solid `tint` arc from 12 o'clock, butt caps, stroke ≈6% of the
+    /// diameter (`NoopScoreRing.strokeWidth`). No disc, shadow, rim, under-lift or banded gradient.
+    private static func flatVessel(_ ctx: GraphicsContext, _ size: CGSize, level: Double, tint: Color) {
+        let diameter = max(2, min(size.width, size.height))
+        let lineWidth = NoopScoreRing.strokeWidth(forDiameter: diameter)
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let radius = max(0.5, (diameter - lineWidth) / 2)
+        let style = StrokeStyle(lineWidth: lineWidth, lineCap: .butt)
+        ctx.stroke(fullArc(center: center, radius: radius), with: .color(NoopWhoop.track), style: style)
+        let clamped = max(0, min(1, level))
+        if clamped > 0.004 {
+            ctx.stroke(partialArc(center: center, radius: radius, level: clamped),
+                       with: .color(tint), style: style)
+        }
+    }
+    #endif
+
+    /// The Titanium-era sculpted vessel (macOS).
+    private static func legacyVessel(_ base: GraphicsContext, _ size: CGSize, _ sim: LiquidSim, tint: Color) {
         let diameter = max(2, min(size.width, size.height) - 3)
         let rect = CGRect(x: (size.width - diameter) / 2, y: (size.height - diameter) / 2,
                           width: diameter, height: diameter)
@@ -580,7 +608,14 @@ struct LiquidScoreGauge: View {
     @State private var shown: Double = 0
 
     private var frac: Double? { score.map { max(0, min(1, $0 / maxValue)) } }
-    private var centerFont: Font { StrandFont.rounded(diameter * 26 / Self.homeHeroDiameter) }
+    private var centerFont: Font {
+        #if os(iOS)
+        // WHOOP ring numeral: SF Pro bold condensed (the Today ring), sized for the thinner flat ring.
+        return StrandFont.scoreNumber(diameter * 0.32)
+        #else
+        return StrandFont.rounded(diameter * 26 / Self.homeHeroDiameter)
+        #endif
+    }
     private var captionFont: Font { StrandFont.rounded(diameter * 0.085, weight: .medium) }
 
     var body: some View {
@@ -603,7 +638,7 @@ struct LiquidScoreGauge: View {
                 }
             }
             .foregroundStyle(numberColor)
-            .shadow(color: .black.opacity(0.5), radius: 6, y: 1)
+            .noopLegacyShadow(color: .black.opacity(0.5), radius: 6, y: 1)
             .lineLimit(1)
             .minimumScaleFactor(0.6)
             .allowsHitTesting(false)

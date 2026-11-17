@@ -39,7 +39,11 @@ public struct GlowRing: View {
     /// its centre text in the EXACT same size + weight as a filled ring, keeping the hero trio's three
     /// centre read-outs visually consistent regardless of state.
     public static func centerFont(diameter: CGFloat) -> Font {
-        StrandFont.rounded(diameter * 0.36, weight: .bold)
+        #if os(iOS)
+        return StrandFont.scoreNumber(diameter * 0.36)
+        #else
+        return StrandFont.rounded(diameter * 0.36, weight: .bold)
+        #endif
     }
 
     private var clamped: CGFloat { CGFloat(min(max(fraction, 0), 1)) }
@@ -47,15 +51,27 @@ public struct GlowRing: View {
     private var shown: Double { appeared ? value : 0 }
     private var drawSpring: Animation { .spring(response: 0.9, dampingFraction: 0.86) }
 
+    /// The ring itself. iOS (WHOOP re-skin): the shared flat `NoopScoreRing` — #353C42 track, solid
+    /// butt-capped arc from 12 o'clock, stroke ≈6% of the diameter (capped at `lineWidth`).
+    /// Elsewhere: the original round-capped arc over a faint textPrimary track.
+    @ViewBuilder private var ring: some View {
+        #if os(iOS)
+        NoopScoreRing(progress: Double(filled), color: color,
+                      lineWidth: NoopScoreRing.strokeWidth(forDiameter: diameter, cap: lineWidth))
+        #else
+        // Clearly-visible full-circle track, so the arc reads as a fraction of a circle (like WHOOP).
+        Circle()
+            .stroke(StrandPalette.textPrimary.opacity(0.10),
+                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+
+        // Design Reset: NO glow. A flat, crisp solid arc only — the clean Material-style look.
+        arc.stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+        #endif
+    }
+
     public var body: some View {
         ZStack {
-            // Clearly-visible full-circle track, so the arc reads as a fraction of a circle (like WHOOP).
-            Circle()
-                .stroke(StrandPalette.textPrimary.opacity(0.10),
-                        style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-
-            // Design Reset: NO glow. A flat, crisp solid arc only — the clean Material-style look.
-            arc.stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+            ring
 
             // Centred rolling number.
             Text(format(shown))

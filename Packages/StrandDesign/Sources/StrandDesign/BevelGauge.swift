@@ -74,6 +74,39 @@ public struct BevelGauge: View {
     private var gradient: Gradient { Gradient(stops: stops) }
 
     public var body: some View {
+        #if os(iOS)
+        flatBody
+        #else
+        legacyBody
+        #endif
+    }
+
+    #if os(iOS)
+    /// iOS (WHOOP re-skin): a flat full-circle `NoopScoreRing` — #353C42 track plus a solid arc from 12
+    /// o'clock in `tipColor`, butt caps, stroke ≈6% of the diameter (capped at the requested
+    /// `lineWidth`). No frosted disc, no gradient, no end-cap dot. Same frame, same centre read-out.
+    private var flatBody: some View {
+        ZStack {
+            NoopScoreRing(progress: animatedFraction, color: tipColor,
+                          lineWidth: NoopScoreRing.strokeWidth(forDiameter: diameter, cap: lineWidth))
+            if showsLabel { centerLabel }
+        }
+        .frame(width: diameter, height: diameter)
+    }
+    #endif
+
+    /// The centre number font: SF Pro bold condensed on iOS (the Today ring numeral), the house
+    /// rounded numeral elsewhere.
+    private var numberFont: Font {
+        #if os(iOS)
+        return StrandFont.scoreNumber(diameter * 0.32)
+        #else
+        return StrandFont.rounded(diameter * 0.30, weight: .bold)
+        #endif
+    }
+
+    /// The Titanium-era 240° open gauge (macOS / watchOS).
+    private var legacyBody: some View {
         ZStack {
             // STATIC BACKDROP: the frosted inner disc + the faint full-span track. Neither depends on
             // `animatedFraction`, so SwiftUI/CoreAnimation already caches it as an unchanged layer and
@@ -156,8 +189,10 @@ public struct BevelGauge: View {
     private var centerLabel: some View {
         VStack(spacing: 2) {
             Text(numberText)
-                .font(StrandFont.rounded(diameter * 0.30, weight: .bold))
+                .font(numberFont)
                 .foregroundStyle(StrandPalette.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
                 .contentTransition(.numericText())
             if let captionText {
                 Text(captionText)

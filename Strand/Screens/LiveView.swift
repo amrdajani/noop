@@ -911,12 +911,12 @@ private struct LiveHeartReadout: View {
                     // The big focal HR numeral counts up to the live value (the hero number); a crisp
                     // em-dash while there's no HR yet.
                     if displayHR != nil {
-                        CountUpNumber(value: shown, font: StrandFont.rounded(88, weight: .semibold))
+                        CountUpNumber(value: shown, font: StrandFont.ringNumber(88, weight: .semibold))
                             .foregroundStyle(tint)
-                            .shadow(color: .black.opacity(0.4), radius: 6, y: 1)
+                            .noopLegacyShadow(color: .black.opacity(0.4), radius: 6, y: 1)
                     } else {
                         Text("—")
-                            .font(StrandFont.rounded(88, weight: .semibold))
+                            .font(StrandFont.ringNumber(88, weight: .semibold))
                             .foregroundStyle(StrandPalette.textTertiary)
                     }
                     Text("bpm")

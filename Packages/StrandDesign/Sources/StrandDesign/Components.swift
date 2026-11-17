@@ -421,6 +421,14 @@ public struct InsightCard: View {
 
 // MARK: - Range control (the ONE segmented pill control, used everywhere)
 
+#if os(iOS)
+/// Flat iOS fills for `SegmentedPillControl` (a generic type can't hold static stored properties).
+private enum SegmentedPillFlatStyle {
+    static let track = Color(light: "#E8E9ED", dark: "#2E353A")
+    static let selected = Color(light: "#FFFFFF", dark: "#3A4248")
+}
+#endif
+
 public struct SegmentedPillControl<T: Hashable>: View {
     let items: [T]
     let label: (T) -> String
@@ -501,24 +509,7 @@ public struct SegmentedPillControl<T: Hashable>: View {
                                maxHeight: .infinity)
                         .padding(.horizontal, equalWidth ? NoopMetrics.space1 : 9)
                         .background {
-                            if sel {
-                                let selectedShape = RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                selectedShape
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [NoopVisualStyle.surfaceTop, NoopVisualStyle.surface],
-                                            startPoint: .top,
-                                            endPoint: .bottom
-                                        )
-                                    )
-                                    .overlay(
-                                        selectedShape.strokeBorder(
-                                            NoopVisualStyle.borderHighlight.opacity(0.62),
-                                            lineWidth: 0.75
-                                        )
-                                    )
-                                    .shadow(color: .black.opacity(0.20), radius: 4, x: 0, y: 2)
-                            }
+                            if sel { selectedPill }
                         }
                         .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
@@ -532,27 +523,60 @@ public struct SegmentedPillControl<T: Hashable>: View {
         }
         .padding(3)
         .frame(maxWidth: equalWidth ? .infinity : nil)
-        .background {
-            let trackShape = RoundedRectangle(cornerRadius: 13, style: .continuous)
-            trackShape
-                .fill(
+        .background { trackBackground }
+    }
+
+    // iOS (WHOOP re-skin): flat fills, no gradient / bevel stroke / shadow. Track #2E353A, selected
+    // #3A4248 in dark. macOS keeps the Titanium gradient pill exactly as before.
+    @ViewBuilder private var selectedPill: some View {
+        #if os(iOS)
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(SegmentedPillFlatStyle.selected)
+        #else
+        let selectedShape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        selectedShape
+            .fill(
+                LinearGradient(
+                    colors: [NoopVisualStyle.surfaceTop, NoopVisualStyle.surface],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .overlay(
+                selectedShape.strokeBorder(
+                    NoopVisualStyle.borderHighlight.opacity(0.62),
+                    lineWidth: 0.75
+                )
+            )
+            .shadow(color: .black.opacity(0.20), radius: 4, x: 0, y: 2)
+        #endif
+    }
+
+    @ViewBuilder private var trackBackground: some View {
+        #if os(iOS)
+        RoundedRectangle(cornerRadius: 13, style: .continuous)
+            .fill(SegmentedPillFlatStyle.track)
+        #else
+        let trackShape = RoundedRectangle(cornerRadius: 13, style: .continuous)
+        trackShape
+            .fill(
+                LinearGradient(
+                    colors: [NoopVisualStyle.inset, NoopVisualStyle.canvas.opacity(0.78)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .overlay(
+                trackShape.strokeBorder(
                     LinearGradient(
-                        colors: [NoopVisualStyle.inset, NoopVisualStyle.canvas.opacity(0.78)],
+                        colors: [NoopVisualStyle.borderHighlight.opacity(0.48), NoopVisualStyle.border],
                         startPoint: .top,
                         endPoint: .bottom
-                    )
+                    ),
+                    lineWidth: 0.8
                 )
-                .overlay(
-                    trackShape.strokeBorder(
-                        LinearGradient(
-                            colors: [NoopVisualStyle.borderHighlight.opacity(0.48), NoopVisualStyle.border],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        ),
-                        lineWidth: 0.8
-                    )
-                )
-        }
+            )
+        #endif
     }
 }
 

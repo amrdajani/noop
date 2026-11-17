@@ -534,7 +534,7 @@ struct SleepView: View {
             Text("Sleep")
                 .font(StrandFont.rounded(24, weight: .semibold))
                 .foregroundStyle(Color.white.opacity(0.96))
-                .shadow(color: .black.opacity(0.35), radius: 5, y: 1)
+                .noopLegacyShadow(color: .black.opacity(0.35), radius: 5, y: 1)
                 .padding(.top, 6)
                 .accessibilityAddTraits(.isHeader)
 
@@ -553,7 +553,7 @@ struct SleepView: View {
                     Text(sleepScoreWord(score))
                         .font(StrandFont.subhead.weight(.semibold))
                         .foregroundStyle(Color.white.opacity(0.90))
-                        .shadow(color: .black.opacity(0.30), radius: 2, y: 1)
+                        .noopLegacyShadow(color: .black.opacity(0.30), radius: 2, y: 1)
                 }
                 .padding(.top, 8)
                 .accessibilityElement(children: .ignore)

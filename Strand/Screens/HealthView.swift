@@ -912,9 +912,9 @@ private struct FitnessAgeSection: View {
                         LiquidVessel(value: fitnessAgeFraction(age), tint: StrandPalette.chargeColor,
                                      animated: true, tapPassesThrough: true)
                             .frame(width: 96, height: 96)
-                        CountUpNumber(value: Double(shown), font: StrandFont.rounded(30), prefix: bound)
+                        CountUpNumber(value: Double(shown), font: StrandFont.ringNumber(30), prefix: bound)
                             .foregroundStyle(.white)
-                            .shadow(color: .black.opacity(0.5), radius: 6, y: 1)
+                            .noopLegacyShadow(color: .black.opacity(0.5), radius: 6, y: 1)
                             .allowsHitTesting(false)
                     }
                     VStack(alignment: .leading, spacing: NoopMetrics.space1) {
@@ -1259,9 +1259,9 @@ private struct VitalitySection: View {
                         LiquidVessel(value: max(0, min(1, v / 100)), tint: StrandPalette.chargeColor, animated: true)
                             .frame(width: 108, height: 108)
                         VStack(spacing: 0) {
-                            CountUpNumber(value: v, font: StrandFont.rounded(38))
+                            CountUpNumber(value: v, font: StrandFont.ringNumber(38))
                                 .foregroundStyle(.white)
-                                .shadow(color: .black.opacity(0.5), radius: 6, y: 1)
+                                .noopLegacyShadow(color: .black.opacity(0.5), radius: 6, y: 1)
                             Text("of 100").font(StrandFont.caption).foregroundStyle(StrandPalette.textSecondary)
                         }
                         .allowsHitTesting(false)

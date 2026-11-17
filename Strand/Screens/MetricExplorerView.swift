@@ -1323,14 +1323,14 @@ struct MetricDetailView: View {
                                     .frame(width: 188, height: 188)
                                     .accessibilityHidden(true)
                                 VStack(spacing: 2) {
-                                    CountUpNumber(value: v, font: StrandFont.rounded(48))
+                                    CountUpNumber(value: v, font: StrandFont.ringNumber(48))
                                         .foregroundStyle(.white)
-                                        .shadow(color: .black.opacity(0.5), radius: 6, y: 1)
+                                        .noopLegacyShadow(color: .black.opacity(0.5), radius: 6, y: 1)
                                     if !metric.unit.isEmpty {
                                         Text(metric.unit)
                                             .font(StrandFont.footnote)
                                             .foregroundStyle(.white.opacity(0.85))
-                                            .shadow(color: .black.opacity(0.5), radius: 4, y: 1)
+                                            .noopLegacyShadow(color: .black.opacity(0.5), radius: 4, y: 1)
                                     }
                                 }
                                 .allowsHitTesting(false)
