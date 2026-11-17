@@ -120,6 +120,12 @@ struct LiquidSky: View {
     @ObservedObject private var motion = NoopMotionState.shared
 
     var body: some View {
+        #if os(iOS)
+        // iOS WHOOP-style re-skin: no animated sky. The backdrop is the flat slate page gradient, drawn
+        // in POINTS from the top, so a header-height band lines up exactly with the full-page gradient
+        // the scaffold draws behind it. Type and initializer are unchanged so call sites still compile.
+        NoopPageBackground()
+        #else
         // The sky must dissolve into the SAME canvas colour the body uses (theme-aware surfaceBase),
         // so there is no hard seam where the sky meets the page — light mode made this glaring.
         let dark = scheme == .dark
@@ -146,6 +152,7 @@ struct LiquidSky: View {
                 }
             }
         }
+        #endif
     }
 
     private func liveHour() -> Double {
@@ -238,6 +245,16 @@ struct LiquidScaffoldSky: View {
     @ObservedObject private var backgroundStore = BackgroundImageStore.shared
 
     var body: some View {
+        #if os(iOS)
+        // iOS WHOOP-style re-skin: a custom image still overrides; otherwise the flat page gradient,
+        // always full height (no day-cycle sky, so the two Appearance sky gates have nothing to gate).
+        if backgroundStore.isActive {
+            BackgroundImageBackdrop()
+        } else {
+            NoopPageBackground()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        #else
         if backgroundStore.isActive {
             BackgroundImageBackdrop()
         } else if showDayCycleBackground {
@@ -247,6 +264,7 @@ struct LiquidScaffoldSky: View {
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
         }
+        #endif
     }
 }
 
@@ -266,6 +284,10 @@ struct LiquidSkyStatic: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
+        #if os(iOS)
+        // iOS WHOOP-style re-skin: the flat slate page gradient instead of the static sky.
+        NoopPageBackground()
+        #else
         let h = hour ?? liveHour()
         let dark = scheme == .dark
         let settle = Color(.sRGB,
@@ -295,6 +317,7 @@ struct LiquidSkyStatic: View {
                      with: .linearGradient(Gradient(colors: [settle.opacity(0), settle.opacity(settleStrength)]),
                                            startPoint: CGPoint(x: 0, y: hh * 0.45), endPoint: CGPoint(x: 0, y: hh)))
         }
+        #endif
     }
 
     private func liveHour() -> Double {

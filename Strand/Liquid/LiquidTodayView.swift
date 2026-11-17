@@ -98,6 +98,12 @@ struct LiquidTodayView: View {
     @State private var showSettings = false
     @State private var synthesisExpanded = false
     @State private var showLiveSession = false
+    /// WHOOP-style iOS home: the day key whose insight card the wearer dismissed (one dismissal per day;
+    /// a new day brings the card back). UI-local, not part of the .noopbak whitelist.
+    @AppStorage("liquidToday.insightDismissedDay") private var insightDismissedDay = ""
+    /// Current Charge streak (#569 `StreakCalculator`, the same math Settings' streak card uses), resolved
+    /// once in `load()`. 0 hides the header streak chip.
+    @State private var streakCurrent = 0
 
     /// Live Sessions (silent guardian) beta gate — the SAME key the Settings toggle writes. Default ON
     /// (the entry is BETA-labelled in-UI); off removes the Start-session control entirely.
@@ -343,6 +349,11 @@ struct LiquidTodayView: View {
 
                 liquidRefreshIndicator   // grows in the revealed space; a vessel filling with the pull
 
+                #if os(iOS)
+                // WHOOP-style home layout (iOS only): header (avatar / day pill / strap), three score
+                // rings, monitor cards, insight, My Day, Coach bar, then the user's ordered sections.
+                whoopHome
+                #else
                 VStack(alignment: .leading, spacing: 12) {
                     scene
                     // The strain/illness early-warning banner, dropped in the liquid Home rewrite. Liquid is
@@ -402,6 +413,7 @@ struct LiquidTodayView: View {
                 }
                 .padding(.horizontal, NoopMetrics.screenHPadding)
                 .padding(.top, 30) // sit the title lower into the sky, not jammed under the status bar
+                #endif
             }
             #if os(macOS)
             // Keep the phone-shaped column readable + centred on the wide mac detail pane. The sky is a
@@ -427,6 +439,17 @@ struct LiquidTodayView: View {
         // moves the sky (the exact behaviour the scaffold uses on the classic Today).
         .background(alignment: .top) {
             ZStack(alignment: .top) {
+                #if os(iOS)
+                // WHOOP-style home: a flat dark gradient (no animated sky). A user-picked custom photo
+                // still overrides it, as it does on every other tab.
+                if backgroundStore.isActive {
+                    BackgroundImageBackdrop()
+                } else {
+                    WhoopHomeStyle.pageGradient
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+                #else
                 StrandPalette.surfaceBase
                 // Custom background image (#custom-background): a picked photo OVERRIDES the sky, filling
                 // the whole backdrop (same cached image as every other tab, so it's seamless).
@@ -449,6 +472,7 @@ struct LiquidTodayView: View {
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
                 }
+                #endif
             }
             .ignoresSafeArea()
         }
@@ -689,7 +713,11 @@ struct LiquidTodayView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 11)
+            #if os(iOS)
+            .background(WhoopCardSurface(opacity: cardOpacity))
+            #else
             .background(NoopPanelSurface(cornerRadius: 18, surfaceOpacity: cardOpacity))
+            #endif
         }
         .buttonStyle(LiquidPressStyle())
         .accessibilityLabel("Start a live session. Beta. Silent strap coaching against today's Charge.")
@@ -1145,7 +1173,11 @@ struct LiquidTodayView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 11)
+        #if os(iOS)
+        .background(WhoopCardSurface(opacity: cardOpacity))
+        #else
         .background(NoopPanelSurface(tint: tint, cornerRadius: 20, surfaceOpacity: cardOpacity))
+        #endif
     }
 
     // MARK: - Synthesis (greeting + readiness pills + one-liner)
@@ -1521,7 +1553,11 @@ struct LiquidTodayView: View {
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(minHeight: keyMetricsDetailed ? 154 : 116, alignment: .topLeading)
+        #if os(iOS)
+        .background(WhoopCardSurface(opacity: cardOpacity))
+        #else
         .background(NoopPanelSurface(tint: tint, cornerRadius: 18, surfaceOpacity: cardOpacity))
+        #endif
         // #430 parity: tap -> the metric's trend detail (the same Explore dossier its MetricRow pushes,
         // closure-based NavigationLink per #38). A metric with no catalog entry stays inert.
         return Group {
@@ -1607,7 +1643,14 @@ struct LiquidTodayView: View {
     /// Matches the Android twin, whose `SectionHeader` already takes `trailing: String? = null`.
     private func sectionHead(_ title: String, trailing: String? = nil) -> some View {
         HStack(alignment: .firstTextBaseline) {
+            #if os(iOS)
+            Text(LocalizedStringKey(title))
+                .font(.system(size: 12.5, weight: .heavy))
+                .tracking(1.8)
+                .foregroundStyle(WhoopHomeStyle.textSecondary)
+            #else
             Text(LocalizedStringKey(title)).font(StrandFont.overline).tracking(1.6).foregroundStyle(StrandPalette.textTertiary)
+            #endif
             Spacer()
             if let trailing {
                 Text(LocalizedStringKey(trailing)).font(StrandFont.caption).foregroundStyle(StrandPalette.textTertiary)
@@ -1621,7 +1664,11 @@ struct LiquidTodayView: View {
         content()
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
+            #if os(iOS)
+            .background(WhoopCardSurface(opacity: cardOpacity))
+            #else
             .background(NoopPanelSurface(cornerRadius: 22, surfaceOpacity: cardOpacity))
+            #endif
     }
 
     // MARK: - Data
@@ -1642,6 +1689,14 @@ struct LiquidTodayView: View {
         cachedDisplayDay = day
         await reloadRRUnitPolicy()
         cachedReadiness = ReadinessEngine.evaluate(days: repo.days, today: day?.day)
+        // WHOOP-style header streak chip: the SAME `StreakCalculator` call Settings' streak card makes
+        // (a day qualifies when it carries a Charge score), resolved here so body never scans repo.days.
+        let streakDays = repo.days
+        let streakToday = AnalyticsEngine.dayString(Int(Date().timeIntervalSince1970),
+                                                    offsetSec: TimeZone.current.secondsFromGMT())
+        streakCurrent = StreakCalculator.streaks(dayKeys: streakDays.map { $0.day },
+                                                 qualified: streakDays.map { $0.recovery != nil },
+                                                 today: streakToday).current
         // Prior-day vitals carry, resolved ONCE here (never in body). Bound to today's own key so it can't
         // echo today's still-forming row; only on today (a past day's own row is the whole story).
         let tkey = cachedDisplayDay?.day ?? selectedDayKey
@@ -3216,3 +3271,679 @@ private extension View {
         #endif
     }
 }
+
+// MARK: - WHOOP-style home (iOS)
+//
+// The iOS Today is laid out like a WHOOP home screen: a compact header (avatar + streak, day pill,
+// strap battery), three thin score rings, two monitor cards, an insight card, "My Day" + Coach bar,
+// then the user's ordered Today sections as flat dark cards. STYLE imitation only — no WHOOP logos,
+// wordmarks or assets (AGENTS.md). Every value and tap reuses the same state / routes the liquid
+// layout (still used on macOS) binds to, so no data path changes.
+
+/// Fixed colours for the WHOOP-style home. A dark-only surface by design (the content is forced to the
+/// dark colour scheme), so these are plain sRGB literals rather than theme-aware palette tokens.
+fileprivate enum WhoopHomeStyle {
+    static func rgb(_ hex: UInt32, _ opacity: Double = 1) -> Color {
+        Color(.sRGB,
+              red: Double((hex >> 16) & 0xFF) / 255,
+              green: Double((hex >> 8) & 0xFF) / 255,
+              blue: Double(hex & 0xFF) / 255,
+              opacity: opacity)
+    }
+
+    static let rest = rgb(0x7BA1BB)
+    static let effort = rgb(0x1A9BEB)
+    static let track = rgb(0x353C42)
+    static let card = rgb(0x2E353A)
+    static let chip = rgb(0x434A50)
+    static let link = rgb(0x3E9BD8)
+    static let dayPill = rgb(0x262D33)
+    static let dayPillInner = rgb(0x3A4248)
+    static let streakChip = rgb(0x2E363C)
+    static let askBar = rgb(0x262C2F)
+    static let bodyText = rgb(0xC6CBCF)
+    static let textSecondary = Color.white.opacity(0.72)
+    static let textTertiary = Color.white.opacity(0.5)
+    static let cardRadius: CGFloat = 16
+
+    static var pageGradient: LinearGradient {
+        LinearGradient(stops: [
+            .init(color: rgb(0x2C363D), location: 0),
+            .init(color: rgb(0x13171A), location: 0.38),
+            .init(color: rgb(0x0B0F11), location: 1),
+        ], startPoint: .top, endPoint: .bottom)
+    }
+
+    static var insightGradient: RadialGradient {
+        RadialGradient(colors: [rgb(0x1E7A5D), rgb(0x225A4C), rgb(0x2A3D3B), rgb(0x2C3236)],
+                       center: .topTrailing, startRadius: 0, endRadius: 380)
+    }
+}
+
+/// The flat WHOOP-style card fill. Honours the Card-transparency preference like the liquid surfaces.
+fileprivate struct WhoopCardSurface: View {
+    var opacity: Double = 1
+    var body: some View {
+        RoundedRectangle(cornerRadius: WhoopHomeStyle.cardRadius, style: .continuous)
+            .fill(WhoopHomeStyle.card.opacity(opacity))
+    }
+}
+
+/// A thin full-circle track with a progress arc from 12 o'clock, clockwise. nil/0 progress = track only.
+fileprivate struct WhoopRing: View {
+    let progress: Double?
+    let color: Color
+    var lineWidth: CGFloat = 5.5
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(WhoopHomeStyle.track, lineWidth: lineWidth)
+            if let progress, progress > 0 {
+                Circle()
+                    .trim(from: 0, to: CGFloat(min(1, progress)))
+                    .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
+        }
+        .padding(lineWidth / 2)
+        .animation(.easeOut(duration: 0.6), value: progress)
+        .accessibilityHidden(true)
+    }
+}
+
+/// The number inside a ring: condensed bold value, a smaller "%" for percentage scores, "—" for no data.
+fileprivate struct WhoopRingValue: View {
+    let value: Double?
+    let decimals: Int
+    let showsPercent: Bool
+
+    private var numberText: String? {
+        guard let value else { return nil }
+        return decimals > 0
+            ? String(format: "%.\(decimals)f", locale: AppLanguage.activeLocale, value)
+            : String(Int(value.rounded()))
+    }
+
+    var body: some View {
+        Group {
+            if let numberText {
+                (Text(verbatim: numberText)
+                    .font(.system(size: 30, weight: .bold).width(.condensed))
+                 + Text(verbatim: showsPercent ? "%" : "")
+                    .font(.system(size: 17, weight: .bold).width(.condensed)))
+                    .monospacedDigit()
+            } else {
+                Text(verbatim: "—")
+                    .font(.system(size: 26, weight: .bold).width(.condensed))
+            }
+        }
+        .foregroundStyle(Color.white)
+        .lineLimit(1)
+        .minimumScaleFactor(0.6)
+        .accessibilityHidden(true)
+    }
+}
+
+#if os(iOS)
+extension LiquidTodayView {
+    /// The whole iOS home column (everything below the pull-to-refresh indicator).
+    fileprivate var whoopHome: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            whoopHeader
+                .padding(.top, 4)
+            whoopRingsRow
+                .padding(.top, 30)
+            if chargeLegacyRRGap {
+                ChargeLegacyRRGapNote()
+                    .padding(.top, 12)
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                // Pinned above everything reorderable, exactly as in the liquid layout: a raised health
+                // alert and an active workout must never sit below the fold.
+                HealthAlertBanner()
+                ActiveWorkoutIndicatorSection()
+                whoopMonitorCards
+                whoopInsightCard
+                whoopMyDayRow
+                    .padding(.top, 14)
+                if coachEnabled { whoopAskBar }
+                // The user's saved section order + visibility (TodayLayoutPrefs). The hero and the
+                // synthesis card are represented by the rings and the insight card above.
+                ForEach(sectionOrder) { section in
+                    whoopSection(section)
+                }
+                AutoWorkoutCard()
+                dataSourcesSection
+                Color.clear.frame(height: 90) // floating tab-bar clearance
+            }
+            .padding(.top, 28)
+        }
+        .padding(.horizontal, 16)
+        // Dark-only surface: resolve the theme-aware palette tokens used by the reused sections dark too.
+        .environment(\.colorScheme, .dark)
+    }
+
+    @ViewBuilder
+    fileprivate func whoopSection(_ section: TodaySection) -> some View {
+        switch section {
+        case .hero, .synthesis: EmptyView()
+        case .liveSession: if liveSessionsBeta { liveSessionStartRow }
+        case .keyMetrics: keyMetricsSection
+        case .workouts: lastWorkoutsSection
+        case .heartRate: heartRateSection
+        case .recoveryVitals: recoveryVitalsSection
+        case .yourCards: yourCardsSection
+        case .menstrualCycle:
+            if selectedDayOffset == 0 { MenstrualCycleHomeCard() }
+        case .journal: if selectedDayOffset == 0 { JournalReminderCard() }
+        case .addedCards: if selectedDayOffset == 0 { hostedCardsSection }
+        }
+    }
+
+    // MARK: Header
+
+    fileprivate var whoopHeader: some View {
+        ZStack {
+            HStack(spacing: 0) {
+                whoopAvatar
+                Spacer(minLength: 8)
+                WhoopStrapStatusButton()
+            }
+            whoopDayPill
+        }
+        .frame(height: 31)
+    }
+
+    /// Profile photo (Settings) with the streak chip tucked behind it. Tap → Settings, as before.
+    fileprivate var whoopAvatar: some View {
+        Button { showSettings = true } label: {
+            HStack(spacing: 0) {
+                ProfileAvatarView(imageData: profile.avatarImageData, size: 27,
+                                  fallbackTint: Color.white.opacity(0.85))
+                    .frame(width: 27, height: 27)
+                    .clipShape(Circle())
+                    .overlay(Circle().strokeBorder(Color.white, lineWidth: 2))
+                    .zIndex(1)
+                if streakCurrent > 0 {
+                    HStack(spacing: 3) {
+                        Image(systemName: "flame.fill")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(StrandPalette.metricAmber)
+                        Text(verbatim: "\(streakCurrent)")
+                            .font(.system(size: 11, weight: .bold))
+                            .monospacedDigit()
+                            .foregroundStyle(Color.white)
+                    }
+                    .padding(.leading, 12)
+                    .padding(.trailing, 8)
+                    .frame(height: 21)
+                    .background(Capsule().fill(WhoopHomeStyle.streakChip))
+                    .padding(.leading, -8)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(streakCurrent > 0
+                            ? Text("Profile and settings. \(streakCurrent) day streak")
+                            : Text("Profile and settings"))
+    }
+
+    /// The pill's centre label: TODAY, else the selected day's short date (e.g. NOV 14).
+    fileprivate var whoopDayPillTitle: String {
+        if selectedDayOffset == 0 { return String(localized: "Today").uppercased() }
+        return selectedLogicalDay
+            .formatted(.dateTime.month(.abbreviated).day().locale(AppLanguage.activeLocale))
+            .uppercased()
+    }
+
+    fileprivate func whoopStepDay(_ delta: Int) {
+        let next = Self.clampedDayOffset(current: selectedDayOffset, delta: delta, maxOffset: earliestDayOffset)
+        guard next != selectedDayOffset else { return }
+        withAnimation(StrandMotion.interactive) { selectedDayOffset = next }
+    }
+
+    /// Day navigation: ‹ older · [TODAY → calendar] · newer ›. Same offset state the swipe gesture and the
+    /// calendar popover drive, clamped by the same `clampedDayOffset`.
+    fileprivate var whoopDayPill: some View {
+        let canGoBack = selectedDayOffset < earliestDayOffset
+        let canGoForward = selectedDayOffset > 0
+        return HStack(spacing: 0) {
+            Button { whoopStepDay(1) } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color.white.opacity(canGoBack ? 0.9 : 0.3))
+                    .frame(width: 27, height: 31)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!canGoBack)
+            .accessibilityLabel(Text("Previous day"))
+
+            Button { showDayPicker = true } label: {
+                Text(verbatim: whoopDayPillTitle)
+                    .font(.system(size: 11.5, weight: .bold))
+                    .tracking(1.6)
+                    .foregroundStyle(Color.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .padding(.horizontal, 6)
+                    .frame(width: 81, height: 29)
+                    .background(Capsule().fill(WhoopHomeStyle.dayPillInner))
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(dayTitle). Tap to pick a day, swipe to change day.")
+            .popover(isPresented: $showDayPicker) {
+                DatePicker("", selection: dayPickerBinding, in: ...Repository.logicalDay(Date()),
+                           displayedComponents: [.date])
+                    .datePickerStyle(.graphical)
+                    .labelsHidden()
+                    .padding(12)
+                    .frame(minWidth: 320, minHeight: 360)
+                    .liquidPopoverAdaptation()
+            }
+
+            Button { whoopStepDay(-1) } label: {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color.white.opacity(canGoForward ? 0.9 : 0.3))
+                    .frame(width: 27, height: 31)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!canGoForward)
+            .accessibilityLabel(Text("Next day"))
+        }
+        .frame(width: 136, height: 31)
+        .background(Capsule().fill(WhoopHomeStyle.dayPill))
+    }
+
+    // MARK: Score rings
+
+    fileprivate var whoopRingsRow: some View {
+        // Effort on the user's chosen scale (#45/#268): 0–21 with one decimal, or 0–100 whole — the same
+        // conversion the liquid hero applies, so every Effort read-out agrees.
+        let effortMax: Double = effortScale == .whoop ? 21 : 100
+        let effortValue = effortStrain(displayDay).map { UnitFormatter.effortValue($0, scale: effortScale) }
+        let chargeTint = chargeDisplay.pct.map { StrandPalette.recoveryColor($0) } ?? StrandPalette.chargeColor
+        return HStack(alignment: .top, spacing: 0) {
+            whoopRingColumn(label: String(localized: "Rest"), value: restScore, maxValue: 100,
+                            decimals: 0, showsPercent: true, color: WhoopHomeStyle.rest,
+                            route: .metric(HeroRingMetric.rest), guide: .rest)
+            whoopRingColumn(label: String(localized: "Charge"), value: chargeDisplay.pct, maxValue: 100,
+                            decimals: 0, showsPercent: true, color: chargeTint,
+                            route: .metric(HeroRingMetric.charge), guide: .charge)
+            whoopRingColumn(label: String(localized: "Effort"), value: effortValue, maxValue: effortMax,
+                            decimals: effortScale == .whoop ? 1 : 0, showsPercent: false,
+                            color: WhoopHomeStyle.effort,
+                            route: .metric(HeroRingMetric.effort), guide: .effort)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// One ring + label. The whole column pushes the metric's detail (the same `TabRoute.metric` the
+    /// liquid hero gauge used); the scoring guide stays reachable via long-press and a VoiceOver action.
+    fileprivate func whoopRingColumn(label: String, value: Double?, maxValue: Double, decimals: Int,
+                                     showsPercent: Bool, color: Color, route: TabRoute,
+                                     guide: ScoreSection) -> some View {
+        let progress: Double? = value.map { max(0, min(1, $0 / maxValue)) }
+        let spoken: String = value.map {
+            decimals > 0
+                ? String(format: "%.\(decimals)f", locale: AppLanguage.activeLocale, $0)
+                : String(Int($0.rounded()))
+        } ?? String(localized: "no data yet")
+        return NavigationLink(value: route) {
+            VStack(spacing: 10) {
+                ZStack {
+                    WhoopRing(progress: progress, color: color, lineWidth: 5.5)
+                    WhoopRingValue(value: value, decimals: decimals, showsPercent: showsPercent)
+                        .padding(.horizontal, 12)
+                }
+                .frame(width: 88, height: 88)
+                HStack(spacing: 3) {
+                    Text(verbatim: label.uppercased())
+                        .font(.system(size: 12, weight: .heavy))
+                        .tracking(2.2)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .heavy))
+                }
+                .foregroundStyle(Color.white)
+            }
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text("\(label), \(spoken)"))
+        .accessibilityHint(Text("Opens the trend and readings"))
+        .accessibilityAction(named: Text("See how it is scored")) { guideSection = guide }
+        .contextMenu {
+            Button { guideSection = guide } label: {
+                Label("See how it is scored", systemImage: "info.circle")
+            }
+        }
+    }
+
+    // MARK: Monitor cards
+
+    /// Health-monitor one-liner from the same per-field vitals carry the Recovery Vitals card shows and
+    /// the readiness verdict the synthesis card reads (vitals against the personal baseline).
+    fileprivate var whoopHealthStatus: String {
+        let hrv = displayDay?.avgHrv ?? hrvDay?.avgHrv
+        let rhr = displayDay?.restingHr ?? restingHrDay?.restingHr
+        let resp = displayDay?.respRateBpm ?? vitalsDay?.respRateBpm
+        if hrv == nil && rhr == nil && resp == nil { return String(localized: "No data") }
+        switch readiness.level {
+        case .insufficient: return String(localized: "Calibrating")
+        case .primed, .balanced: return String(localized: "Within range")
+        case .strained, .rundown: return String(localized: "Signals down")
+        }
+    }
+
+    fileprivate var whoopMonitorCards: some View {
+        HStack(alignment: .top, spacing: 12) {
+            NavigationLink(value: TabRoute.health) {
+                whoopMonitorCard(title: String(localized: "Health monitor")) {
+                    HStack(spacing: 8) {
+                        whoopChip {
+                            Image(systemName: "waveform.path.ecg")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(Color.white)
+                        }
+                        Text(verbatim: whoopHealthStatus)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Color.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                    }
+                }
+            }
+            .buttonStyle(LiquidPressStyle())
+
+            NavigationLink(value: TabRoute.stress) {
+                whoopMonitorCard(title: String(localized: "Stress monitor")) {
+                    HStack(spacing: 8) {
+                        whoopChip {
+                            Text(verbatim: stress.map {
+                                String(format: "%.1f", locale: AppLanguage.activeLocale, $0)
+                            } ?? "—")
+                                .font(.system(size: 11, weight: .bold).width(.condensed))
+                                .foregroundStyle(Color.white)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.6)
+                        }
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(verbatim: stress.map { StressBand(score: $0).title }
+                                 ?? String(localized: "Calibrating").uppercased())
+                                .font(.system(size: 13, weight: .heavy))
+                                .tracking(1.0)
+                                .foregroundStyle(Color.white)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                            Text("0–3 scale")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(WhoopHomeStyle.textTertiary)
+                                .lineLimit(1)
+                        }
+                    }
+                }
+            }
+            .buttonStyle(LiquidPressStyle())
+        }
+    }
+
+    fileprivate func whoopChip<V: View>(@ViewBuilder _ content: () -> V) -> some View {
+        content()
+            .frame(width: 24, height: 24)
+            .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(WhoopHomeStyle.chip))
+    }
+
+    fileprivate func whoopMonitorCard<V: View>(title: String, @ViewBuilder _ content: () -> V) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 4) {
+                Text(verbatim: title.uppercased())
+                    .font(.system(size: 12, weight: .heavy))
+                    .tracking(1.4)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .heavy))
+            }
+            .foregroundStyle(Color.white)
+            Spacer(minLength: 10)
+            content()
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 92, maxHeight: 92, alignment: .topLeading)
+        .background(WhoopCardSurface(opacity: cardOpacity))
+        .contentShape(RoundedRectangle(cornerRadius: WhoopHomeStyle.cardRadius, style: .continuous))
+    }
+
+    // MARK: Insight
+
+    /// The synthesis content (calibration progress, else the readiness one-liner) as a dismissible
+    /// insight card. Hidden when the user hid the Synthesis section, or dismissed it for this day.
+    @ViewBuilder
+    fileprivate var whoopInsightCard: some View {
+        if sectionOrder.contains(.synthesis), insightDismissedDay != selectedDayKey {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 8) {
+                    Text(verbatim: (readinessWord.map { String(localized: "Today: \($0)") }
+                                    ?? chargeDisplay.stateLabel).uppercased())
+                        .font(.system(size: 12.5, weight: .heavy))
+                        .tracking(1.8)
+                        .foregroundStyle(Color.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                    Spacer(minLength: 8)
+                    Button {
+                        withAnimation(.easeOut(duration: 0.2)) { insightDismissedDay = selectedDayKey }
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(Color.white.opacity(0.8))
+                            .frame(width: 28, height: 28, alignment: .topTrailing)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text("Dismiss"))
+                }
+                Text(verbatim: chargeDisplay.calibrationDetail ?? synthLine)
+                    .font(.system(size: 15))
+                    .foregroundStyle(WhoopHomeStyle.bodyText)
+                    .lineLimit(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let note = effortZeroNote {
+                    Text(verbatim: note)
+                        .font(.system(size: 12))
+                        .foregroundStyle(WhoopHomeStyle.textTertiary)
+                        .lineLimit(2)
+                }
+                Spacer(minLength: 0)
+                Button {
+                    if coachEnabled { showCoachLauncher = true } else { guideSection = .charge }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(verbatim: (coachEnabled
+                                        ? String(localized: "Ask Coach")
+                                        : String(localized: "See how it is scored")).uppercased())
+                            .font(.system(size: 12.5, weight: .heavy))
+                            .tracking(1.6)
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 12, weight: .bold))
+                    }
+                    .foregroundStyle(WhoopHomeStyle.link)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(18)
+            .frame(maxWidth: .infinity, minHeight: 170, alignment: .topLeading)
+            .background(
+                RoundedRectangle(cornerRadius: WhoopHomeStyle.cardRadius, style: .continuous)
+                    .fill(WhoopHomeStyle.insightGradient)
+                    .opacity(cardOpacity)
+            )
+            .transition(.opacity)
+        }
+    }
+
+    // MARK: My Day + Coach
+
+    fileprivate var whoopMyDayRow: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Text("My Day")
+                .font(.system(size: 27, weight: .semibold))
+                .foregroundStyle(Color.white)
+            Spacer(minLength: 8)
+            // Section order / visibility + both card editors (the header button the liquid layout had).
+            Button { customizationDestination = .today } label: {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Color.white)
+                    .frame(width: 36, height: 36)
+                    .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(WhoopHomeStyle.card))
+            }
+            .buttonStyle(LiquidPressStyle())
+            .accessibilityLabel("Customize Today")
+            // Quick actions (log / add) — the liquid header's + button.
+            Button { router.requestQuickActions() } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(Color.black)
+                    .frame(width: 36, height: 36)
+                    .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color.white))
+            }
+            .buttonStyle(LiquidPressStyle())
+            .accessibilityLabel("Quick actions")
+        }
+    }
+
+    /// Coach entry (#1862 launcher sheet). Only mounted when Coach is enabled.
+    fileprivate var whoopAskBar: some View {
+        Button { showCoachLauncher = true } label: {
+            HStack(spacing: 8) {
+                Text("Ask a question, get support…")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(WhoopHomeStyle.textTertiary)
+            }
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity)
+            .frame(height: 47)
+            .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(WhoopHomeStyle.askBar))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(LiquidPressStyle())
+    }
+}
+
+/// Header strap status: "87%" + a strap glyph with a status dot. Same honest resolution as
+/// `LiquidBatteryButton` (`StrapBatteryDisplay.resolve`, #2208) and the same tap target (Devices); while
+/// a history offload runs it shows a small spinner instead of the percentage.
+fileprivate struct WhoopStrapStatusButton: View {
+    @EnvironmentObject var live: LiveState
+    @EnvironmentObject var router: NavRouter
+    @State private var syncing = false
+
+    private var display: LiquidTodayView.StrapBatteryDisplay {
+        .resolve(
+            activeIsWhoop: live.activeIsWhoop,
+            connected: live.connected,
+            batteryPct: live.batteryPct,
+            charging: live.charging,
+            ringPct: live.ouraBatteryPct,
+            ringCharging: live.ouraWearState == .charging
+        )
+    }
+
+    private var percentText: String? {
+        if case .charge(let pct, _, _) = display { return "\(Int(pct.rounded()))%" }
+        return nil
+    }
+
+    private var charging: Bool {
+        switch display {
+        case .charge(_, let charging, _): return charging
+        case .pending(let charging): return charging
+        case .offline, .notActiveDevice: return false
+        }
+    }
+
+    private var dotColor: Color {
+        switch display {
+        case .charge, .pending: return Color(.sRGB, red: 0x2E / 255, green: 0xD1 / 255, blue: 0x6E / 255, opacity: 1)
+        case .offline, .notActiveDevice: return Color.white.opacity(0.35)
+        }
+    }
+
+    var body: some View {
+        Button { router.openDevices() } label: {
+            HStack(spacing: 6) {
+                if syncing {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .tint(Color.white)
+                } else if let percentText {
+                    Text(verbatim: percentText)
+                        .font(.system(size: 13, weight: .semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(WhoopHomeStyle.textSecondary)
+                }
+                if charging {
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(WhoopHomeStyle.textSecondary)
+                }
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: "applewatch.side.right")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.85))
+                    Circle()
+                        .fill(dotColor)
+                        .frame(width: 6, height: 6)
+                        .overlay(Circle().strokeBorder(Color.black.opacity(0.6), lineWidth: 1))
+                        .offset(x: 3, y: -2)
+                }
+            }
+            .frame(height: 31)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibility)
+        .debouncedSyncSignal(live.backfilling, into: $syncing)
+    }
+
+    private var accessibility: String {
+        if syncing { return String(localized: "Syncing strap history") }
+        switch display {
+        case .notActiveDevice:
+            return String(localized: "Devices")
+        case .offline:
+            return String(localized: "Strap battery, strap not connected")
+        case .pending(let charging):
+            return charging
+                ? String(localized: "Strap battery charging, no reading yet")
+                : String(localized: "Strap battery, no reading yet")
+        case .charge(let percent, let charging, let isRing):
+            let n = Int(percent.rounded())
+            if isRing {
+                return charging
+                    ? String(localized: "Ring battery \(n) percent, charging")
+                    : String(localized: "Ring battery \(n) percent")
+            }
+            return charging
+                ? String(localized: "Strap battery \(n) percent, charging")
+                : String(localized: "Strap battery \(n) percent")
+        }
+    }
+}
+#endif

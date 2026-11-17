@@ -24,7 +24,7 @@ public enum NoopMetrics {
     /// Canonical compact provenance-chip height; shared with overlays that align the chip to a border.
     public static let sourceBadgeHeight: CGFloat = 18
     public static let hypnogramBandMinThickness: CGFloat = 14  // floor so short stages read as bars, not ticks
-    public static let tabBarClearance: CGFloat = 76  // iOS: extra bottom scroll room so the last card clears the floating tab bar
+    public static let tabBarClearance: CGFloat = 16  // iOS (floating bar reserves its own inset; this is breathing room only): extra bottom scroll room so the last card clears the floating tab bar
     /// Canonical diameter for compact circular controls in dense header chrome.
     public static let compactControlSize: CGFloat = 36
     /// Expanded width of the compact charge-to-sync status capsule.
@@ -178,6 +178,22 @@ public struct SectionHeader: View {
         self.title = title; self.overline = overline; self.trailing = trailing
     }
     public var body: some View {
+        #if os(iOS)
+        // WHOOP-style section header: the title is an UPPERCASE, wide-tracked 12pt bold label
+        // (`NoopSectionLabel`); the optional overline drops to a quiet tertiary caption above it.
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 4) {
+                if let overline {
+                    Text(overline).font(StrandFont.caption).foregroundStyle(StrandPalette.textTertiary)
+                }
+                NoopSectionLabel(title)
+            }
+            Spacer()
+            if let trailing {
+                Text(trailing).font(StrandFont.footnote).foregroundStyle(StrandPalette.textSecondary)
+            }
+        }
+        #else
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
                 if let overline { Text(overline).strandOverline() }
@@ -188,6 +204,7 @@ public struct SectionHeader: View {
                 Text(trailing).font(StrandFont.footnote).foregroundStyle(StrandPalette.textSecondary)
             }
         }
+        #endif
     }
 }
 
@@ -598,8 +615,14 @@ public extension View {
 // the new gold tokens so they match Apple ⇄ Android. Pressed = subtle dim + scale.
 
 /// Primary call-to-action: gold-gradient fill, dark gold-deep ink (700), rounded 13.
+/// iOS: the WHOOP capsule-outline CTA (`NoopOutlineButtonStyle`) instead.
 public struct NoopPrimaryButtonStyle: ButtonStyle {
     public init() {}
+    #if os(iOS)
+    public func makeBody(configuration: Configuration) -> some View {
+        NoopOutlineButtonStyle().makeBody(configuration: configuration)
+    }
+    #else
     public func makeBody(configuration: Configuration) -> some View {
         let pressed = configuration.isPressed
         return configuration.label
@@ -619,6 +642,7 @@ public struct NoopPrimaryButtonStyle: ButtonStyle {
             .animation(StrandMotion.interactive, value: pressed)
             .contentShape(Rectangle())
     }
+    #endif
 }
 
 /// Secondary: inset well + 1px white-12 border + primary text. Quieter than gold.

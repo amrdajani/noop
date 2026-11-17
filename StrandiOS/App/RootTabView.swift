@@ -1,5 +1,7 @@
 #if os(iOS)
 import SwiftUI
+import Combine
+import UIKit
 import StrandDesign
 
 /// iOS navigation shell. macOS uses a `NavigationSplitView` sidebar (`RootView`); on iPhone the
@@ -46,6 +48,17 @@ struct RootTabView: View {
     /// Selected tab — bound so tab switches can crossfade (README §Motion: ~240ms opacity swap
     /// between tab roots, calm easing). Defaults to Today.
     @State private var selectedTab: Int = 0
+    /// The floating bar's auto-hide state ("Hide bar when scrolling", #1841). Only ever true while
+    /// `bottomBarAutoHide` is on; any tab change, re-tap, push or pop brings the bar back.
+    @State private var floatingBarHidden = false
+    /// The on-screen keyboard is up. The floating bar and its content reserve step aside while it is,
+    /// the way the system tab bar sat under the keyboard, so a text field (Coach's composer) is not
+    /// pushed a bar's height above the keys.
+    @State private var keyboardVisible = false
+    /// The window's bottom safe-area inset (home indicator), excluding the keyboard. Drives where the
+    /// floating bar sits and how much bottom safe area each tab reserves for it. 34 is the
+    /// home-indicator inset on every Face ID iPhone; the real value replaces it on first layout.
+    @State private var windowSafeAreaBottom: CGFloat = 34
     /// One `NavigationPath` per tab, indexed by tab tag. Re-tapping the already-active tab pops
     /// that tab's stack to its root (#135) by clearing its path — an animated pop that leaves the
     /// root view alive, so an at-root re-tap keeps scroll position and never re-runs `.task`
@@ -74,9 +87,9 @@ struct RootTabView: View {
         if liquidTodayEnabled { LiquidTodayView() } else { TodayView() }
     }
 
-    /// Native tab selection binding. SwiftUI sends taps on the already-selected item through the
-    /// setter, which lets the system tab bar retain the app's refresh / pop-to-root / scroll-to-top
-    /// convention without placing a custom hit-testing layer over the platform bar.
+    /// Tab selection binding. Every selection request goes through the setter, and a request for the
+    /// already-selected tag runs the app's refresh / pop-to-root / scroll-to-top convention. The system
+    /// bar is hidden, so the floating bar's taps (`selectFromFloatingBar`) are what drive it.
     private var nativeTabSelection: Binding<Int> {
         Binding(
             get: { selectedTab },
@@ -99,6 +112,71 @@ struct RootTabView: View {
         }
     }
 
+    // MARK: - Floating tab bar
+
+    /// The pill's destinations. Coach (tag 3) is not here: it is the separate action button.
+    private static let floatingBarItems: [NoopFloatingTabItem] = [
+        NoopFloatingTabItem(tag: 0, title: "Today", icon: "house"),
+        NoopFloatingTabItem(tag: 1, title: "Trends", icon: "chart.line.uptrend.xyaxis"),
+        NoopFloatingTabItem(tag: 2, title: "Sleep", icon: "bed.double"),
+        NoopFloatingTabItem(tag: 4, title: "More", icon: "line.3.horizontal"),
+    ]
+
+    /// Bottom safe area each tab reserves so its scroll content and lists end above the floating bar.
+    /// Zero while the keyboard is up (the bar steps aside then).
+    private var floatingBarReserve: CGFloat {
+        keyboardVisible ? 0 : NoopFloatingTabBarMetrics.contentReserve(safeAreaBottom: windowSafeAreaBottom)
+    }
+
+    /// A tap on a floating-bar item. Routed through `nativeTabSelection`, so a tap on the active tab
+    /// runs exactly the reselect logic the system bar used to trigger (refresh, pop, scroll to top).
+    private func selectFromFloatingBar(_ tag: Int) {
+        StrandHaptic.selection.play()
+        floatingBarHidden = false
+        nativeTabSelection.wrappedValue = tag
+    }
+
+    /// The action button opens Coach. It is only shown with Coach on; the guard covers a tap that lands
+    /// in the same frame as the switch flipping off.
+    private func openCoachFromFloatingBar() {
+        guard coachEnabled else { return }
+        selectFromFloatingBar(3)
+    }
+
+    /// Auto-hide on a decisive vertical drag: finger up (content scrolling down) hides the bar, finger
+    /// down shows it. Inert while the preference is off; only writes state on an actual change.
+    private func updateFloatingBarAutoHide(_ translation: CGSize) {
+        guard bottomBarAutoHide else { return }
+        let dx = translation.width, dy = translation.height
+        guard abs(dy) > 30, abs(dy) > abs(dx) * 1.6 else { return }
+        let hide = dy < 0
+        if hide != floatingBarHidden {
+            withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.24)) { floatingBarHidden = hide }
+        }
+    }
+
+    /// The floating bar, placed so its bottom edge sits `bottomFromScreenEdge` above the screen edge.
+    /// When auto-hidden it slides below the screen edge; it stays in the hierarchy so the
+    /// slide animates both ways.
+    private var floatingTabBar: some View {
+        let placement = NoopFloatingTabBarMetrics.placement(safeAreaBottom: windowSafeAreaBottom)
+        let hiddenOffset = NoopFloatingTabBarMetrics.barHeight + windowSafeAreaBottom + 24
+        return NoopFloatingTabBar(
+            items: Self.floatingBarItems,
+            selection: selectedTab,
+            showsAction: coachEnabled,
+            actionIsSelected: selectedTab == 3,
+            actionTitle: "Coach",
+            onSelect: { selectFromFloatingBar($0) },
+            onAction: { openCoachFromFloatingBar() }
+        )
+        .padding(.bottom, placement.padding)
+        .offset(y: placement.offset + (floatingBarHidden ? hiddenOffset : 0))
+        .opacity(keyboardVisible ? 0 : 1)
+        .allowsHitTesting(!keyboardVisible && !floatingBarHidden)
+        .accessibilityHidden(keyboardVisible || floatingBarHidden)
+    }
+
     /// The anywhere-swipe tab-switch drag (2026-07-02). Held as a property so the attachment site can
     /// enable or disable it through a `GestureMask` instead of attaching it conditionally: a conditional
     /// attachment changes view identity, and this condition toggles on every push and pop, which would
@@ -109,6 +187,9 @@ struct RootTabView: View {
     /// horizontal swipe to change DAYS. Both thresholds are unchanged from the original gesture.
     private var tabSwipeGesture: some Gesture {
         DragGesture(minimumDistance: 24)
+            // The same recognizer reads decisive VERTICAL drags for the floating bar's auto-hide. It
+            // shares the push mask below, so auto-hide only acts at a tab root; a push shows the bar.
+            .onChanged { v in updateFloatingBarAutoHide(v.translation) }
             .onEnded { v in
                 // Today (tab 0) uses horizontal swipe to change DAYS, so tab-swipe is off there.
                 guard selectedTab != 0 else { return }
@@ -122,11 +203,11 @@ struct RootTabView: View {
     }
 
     var body: some View {
-        // The platform tab bar is intentionally left fully native. iOS 26 supplies Liquid Glass and
-        // its dynamic interaction with scrolling content automatically; older supported releases use
-        // the corresponding system material and safe-area behaviour from the same TabView.
+        // The system tab bar is hidden (`.toolbar(.hidden, for: .tabBar)` on every tab, see `tab(…)`)
+        // and the floating WHOOP-style bar is drawn in its place by the overlay below. The TabView is
+        // kept for what it does well: selection state, one live root per tab, per-tab NavigationStacks.
         TabView(selection: nativeTabSelection) {
-            tab(todayTabRoot, "Today", "square.grid.2x2", path: $tabPaths[0], scrollSignal: scrollTop[0]).tag(0)
+            tab(todayTabRoot, "Today", "house", path: $tabPaths[0], scrollSignal: scrollTop[0]).tag(0)
             tab(TrendsView(), "Trends", "chart.line.uptrend.xyaxis", path: $tabPaths[1], scrollSignal: scrollTop[1]).tag(1)
             tab(SleepView(), "Sleep", "bed.double", path: $tabPaths[2], scrollSignal: scrollTop[2]).tag(2)
             // K3: Coach promoted to a top-level tab (was behind the More list). The sparkles icon
@@ -147,9 +228,10 @@ struct RootTabView: View {
         .onChangeCompat(of: coachEnabled) { enabled in
             if !enabled && selectedTab == 3 { selectedTab = 0 }
         }
-        // #1841: the same "Hide bar when scrolling" preference Android drives its own bar with. Here the
-        // system owns the behaviour — iOS 26's tab bar MINIMISES to a pill on scroll down rather than
-        // sliding away entirely, so this is the platform's read of the same intent, not a copy of ours.
+        // #1841: the same "Hide bar when scrolling" preference Android drives its own bar with. With the
+        // system bar hidden this iOS 26 minimise behaviour has nothing to act on; it is kept so the
+        // preference keeps one call site, and the floating bar's own auto-hide
+        // (`updateFloatingBarAutoHide`) is what honours the setting now.
         .noopTabBarAutoHide(bottomBarAutoHide)
             // Tab crossfade — README §Motion: ~240ms opacity swap between tab roots, global calm
             // easing cubic-bezier(0.22,1,0.36,1).
@@ -274,13 +356,45 @@ struct RootTabView: View {
             if liftSession.isActive {
                 LiftSessionBar()
                     .padding(.horizontal, 14)
-                    // Clear the floating tab bar with the same constant every screen uses, or the
+                    // Clear the floating tab bar by the same reserve every tab keeps for it, or the
                     // session bar sits on top of the tab labels.
-                    .padding(.bottom, NoopMetrics.tabBarClearance)
+                    .padding(.bottom, floatingBarReserve)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .animation(.easeInOut(duration: 0.25), value: liftSession.isActive)
+        // The floating tab bar. An overlay rather than a safe-area inset: each tab reserves the bar's
+        // space itself (`floatingBarReserve`, applied inside `tab(…)`), which reaches pushed screens
+        // too, and the bar stays put while the session bar above comes and goes. Attached AFTER the
+        // session-bar inset so that inset does not lift the bar. Keyboard safe area is ignored: the
+        // bar stays under the keyboard and fades out, like the system bar did.
+        .overlay(alignment: .bottom) {
+            floatingTabBar
+                .ignoresSafeArea(.keyboard, edges: .bottom)
+        }
+        // The window's home-indicator inset, read where the shell's own insets do not apply and with
+        // the keyboard excluded. Places the bar and sizes the tabs' reserve.
+        .background {
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear { windowSafeAreaBottom = proxy.safeAreaInsets.bottom }
+                    .onChange(of: proxy.safeAreaInsets.bottom) { _, bottom in windowSafeAreaBottom = bottom }
+            }
+            .ignoresSafeArea(.keyboard, edges: .bottom)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            keyboardVisible = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            keyboardVisible = false
+        }
+        // Any tab change, push or pop brings an auto-hidden bar back, as does switching the preference
+        // off — a hidden bar must never strand the wearer on a screen with no way to reach the others.
+        .onChange(of: selectedTab) { _, _ in floatingBarHidden = false }
+        .onChange(of: tabPaths[selectedTab].count) { _, _ in floatingBarHidden = false }
+        .onChange(of: bottomBarAutoHide) { _, enabled in
+            if !enabled { floatingBarHidden = false }
+        }
         // A session left running by a previous launch is back before this view exists
         // (`LiftSessionController.resumeSaved`, from `StrandiOSApp.init`), as the BAR — not as a sheet
         // thrown in the user's face; they open it when they want it.
@@ -445,8 +559,12 @@ struct RootTabView: View {
             view
                 .background(StrandPalette.surfaceBase.ignoresSafeArea())
                 .toolbar(.hidden, for: .navigationBar)
+                // Hidden on the root AND on the stack below: the root covers iOS's per-view resolution of
+                // the preference, the stack covers screens pushed later that never set it themselves.
+                .toolbar(.hidden, for: .tabBar)
                 .tabRouteDestinations()
         }
+        .floatingTabBarHost(reserve: floatingBarReserve)
         // Drive this tab's root scroll-to-top on an at-root re-tap (#198 follow-up); read by ScreenScaffold
         // / LiquidTodayView inside. Only THIS tab's token changes on its reselect, so the others don't scroll.
         .environment(\.scrollToTopSignal, scrollSignal)
@@ -456,13 +574,13 @@ struct RootTabView: View {
     // The "More" tab is the app's catch-all index. It was a plain SwiftUI `List` with system large-title
     // + system title-case section headers, so it didn't match any other page (which all use ScreenScaffold
     // + SectionHeader's UPPERCASE overline + the 28pt section rhythm). Rebuilt on the shared page chrome:
-    // ScreenScaffold for the title1 "More" + subtitle, a `SectionHeader` overline per group, and the group's
-    // rows in a single grouped NoopCard with hairline dividers — the same row idiom Settings/Health use.
+    // ScreenScaffold for the title1 "More" + subtitle, an UPPERCASE overline per group, and the group's
+    // rows in a single dark rounded card with hairline dividers, over the WHOOP-style page gradient.
     private func moreTab(path: Binding<NavigationPath>, scrollSignal: Int) -> some View {
         NavigationStack(path: path) {
             ScreenScaffold(title: "More", subtitle: "Everything else, one tap away",
                            onRefresh: { await repo.refresh() },
-                           topBackground: liquidScaffoldSky()) {
+                           topBackground: AnyView(NoopMorePageBackground())) {
                 moreSection("Insights") {
                     MoreRow("What Moves You", "wand.and.sparkles", .insightsHub)
                     MoreRow("Intelligence", "brain.head.profile", .intelligence)
@@ -531,10 +649,12 @@ struct RootTabView: View {
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbarBackground(.hidden, for: .navigationBar)
             }
+            .toolbar(.hidden, for: .tabBar)
         }
+        .floatingTabBarHost(reserve: floatingBarReserve)
         // Scroll the More index to the top on an at-root re-tap (#198 follow-up); read by its ScreenScaffold.
         .environment(\.scrollToTopSignal, scrollSignal)
-        .tabItem { Label("More", systemImage: "ellipsis") }
+        .tabItem { Label("More", systemImage: "line.3.horizontal") }
     }
 
     /// One titled, COLLAPSIBLE group in the More index (S2): the app's overline (UPPERCASE) becomes a
@@ -561,11 +681,16 @@ struct RootTabView: View {
                 }
             } label: {
                 HStack(spacing: 6) {
-                    Text(title).strandOverline()
+                    // Section label: UPPERCASE, 12pt heavy, tracking 2 (the WHOOP section-label idiom).
+                    Text(title)
+                        .textCase(.uppercase)
+                        .font(.system(size: 12, weight: .heavy))
+                        .tracking(2)
+                        .foregroundStyle(NoopTabChromeTokens.textSecondary)
                     Spacer(minLength: 8)
                     Image(systemName: "chevron.down")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(StrandPalette.textTertiary)
+                        .foregroundStyle(NoopTabChromeTokens.textTertiary)
                         .rotationEffect(.degrees(isOpen ? 0 : -90))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -577,16 +702,13 @@ struct RootTabView: View {
             .accessibilityHint(Text(isOpen ? String(localized: "Double tap to collapse") : String(localized: "Double tap to expand")))
 
             if isOpen {
-                // Zero internal padding so each MoreRow owns its own comfortable insets + height; the rows
-                // supply their own hairline separators (drawn at the bottom of every row but the last via the
-                // divider overlay) so the group reads as one continuous grouped list, matching Settings/Health.
-                NoopCard(padding: 0) {
-                    VStack(spacing: 0) { rows() }
-                        // Clip the rows column to the card's rounded shape so the last row's bottom hairline is
-                        // trimmed inside the corners (the card draws its surface in the BACKGROUND and doesn't
-                        // clip content itself, so without this the final divider would run past the rounded edge).
-                        .clipShape(RoundedRectangle(cornerRadius: NoopMetrics.cardRadius, style: .continuous))
-                }
+                // One dark rounded card per group (fill #2E353A, radius 16). Each MoreRow owns its insets,
+                // height and bottom hairline; clipping to the card shape trims the last row's hairline
+                // inside the corners so the group reads as one continuous list.
+                let card = RoundedRectangle(cornerRadius: NoopTabChromeTokens.cardRadius, style: .continuous)
+                VStack(spacing: 0) { rows() }
+                    .background(card.fill(NoopTabChromeTokens.card))
+                    .clipShape(card)
             }
         }
     }
@@ -637,10 +759,9 @@ private enum MoreDestination: Hashable {
 }
 
 
-/// One tappable destination row in the More index. A `NavigationLink` whose label is the standard app row:
-/// the SF Symbol icon tinted `StrandPalette.accent`, the title in the body text colour, a `Spacer`, and a
-/// trailing `chevron.right` in `textTertiary`. ~44pt min height + the card's row insets keep the whole row a
-/// comfortable tap target.
+/// One tappable destination row in the More index. A `NavigationLink` whose label is the WHOOP-style row:
+/// the SF Symbol icon in the secondary grey, the title in white 16pt, a `Spacer`, and a trailing
+/// `chevron.right`. ~52pt min height + the row insets keep the whole row a comfortable tap target.
 private struct MoreRow: View {
     let title: LocalizedStringKey
     let icon: String
@@ -653,32 +774,32 @@ private struct MoreRow: View {
     var body: some View {
         NavigationLink(value: route) {
             HStack(spacing: 14) {
-                // Pin the icon to the accent explicitly. A plain inherited tint gets re-resolved by iOS to
-                // its default blue a beat after first render — so the icons flashed green→blue (#184). The
-                // explicit foregroundStyle on the image overrides that; the title keeps the primary colour.
+                // Pin the icon colour explicitly. A plain inherited tint gets re-resolved by iOS to its
+                // default blue a beat after first render — so the icons flashed (#184). The explicit
+                // foregroundStyle on the image overrides that.
                 Image(systemName: icon)
                     .font(.system(size: 17, weight: .regular))
-                    .foregroundStyle(StrandPalette.accent)
+                    .foregroundStyle(NoopTabChromeTokens.textSecondary)
                     .frame(width: 26, alignment: .center)
                 Text(title)
-                    .font(StrandFont.body)
-                    .foregroundStyle(StrandPalette.textPrimary)
+                    .font(.system(size: 16, weight: .regular))
+                    .foregroundStyle(Color.white)
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(StrandPalette.textTertiary)
+                    .foregroundStyle(NoopTabChromeTokens.textTertiary)
             }
             .padding(.horizontal, 16)
-            .frame(minHeight: 44)
+            .frame(minHeight: 52)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             // Hairline under every row; the grouped container clips the last one's overflow so the bottom
             // edge stays clean (the divider sits inside the card's rounded corners).
             .overlay(alignment: .bottom) {
                 Rectangle()
-                    .fill(StrandPalette.hairline)
+                    .fill(NoopTabChromeTokens.rowDivider)
                     .frame(height: 1)
-                    .padding(.leading, 16)
+                    .padding(.leading, 56)
             }
         }
         .buttonStyle(.plain)
@@ -763,6 +884,24 @@ private struct QuickActionSheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Floating tab bar host
+
+private extension View {
+    /// Prepares one tab's NavigationStack for the floating bar: hides the system tab bar for every
+    /// screen in the stack, and reserves `reserve` points of bottom safe area so scroll views, lists and
+    /// forms (root AND pushed) end above the bar while their backgrounds still run under it.
+    func floatingTabBarHost(reserve: CGFloat) -> some View {
+        self
+            .toolbar(.hidden, for: .tabBar)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                Color.clear
+                    .frame(height: reserve)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
     }
 }
 

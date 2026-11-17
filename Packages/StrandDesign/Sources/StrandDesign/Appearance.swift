@@ -107,13 +107,36 @@ public enum AccentColor: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    public static func resolve(_ raw: String) -> AccentColor { AccentColor(rawValue: raw) ?? .mint }
+    /// The accent used when the user has never picked one. iOS defaults to WHOOP blue (the WHOOP-style
+    /// re-skin); macOS / watchOS keep mint.
+    public static var platformDefault: AccentColor {
+        #if os(iOS)
+        return .whoopBlue
+        #else
+        return .mint
+        #endif
+    }
+
+    public static func resolve(_ raw: String) -> AccentColor { AccentColor(rawValue: raw) ?? platformDefault }
+
+    /// WHOOP blue hexes. iOS uses the measured WHOOP link blue (#3E9BD8) in dark.
+    #if os(iOS)
+    static let whoopBlueLight = "#2A7DB8"
+    static let whoopBlueDark = "#3E9BD8"
+    static let whoopBlueHoverLight = "#3A8CC8"
+    static let whoopBlueHoverDark = "#72B6E4"
+    #else
+    static let whoopBlueLight = "#234F9E"
+    static let whoopBlueDark = "#60A0E0"
+    static let whoopBlueHoverLight = "#3A6FC0"
+    static let whoopBlueHoverDark = "#8FBEEC"
+    #endif
 
     /// The chrome accent. `.custom` resolves the stored hex at read time.
     public var accent: Color {
         switch self {
         case .mint:      return NoopVisualStyle.mint
-        case .whoopBlue: return Color(light: "#234F9E", dark: "#60A0E0")
+        case .whoopBlue: return Color(light: AccentColor.whoopBlueLight, dark: AccentColor.whoopBlueDark)
         case .custom:    return Color(hex: StrandPalette.customAccentHex)
         }
     }
@@ -122,7 +145,7 @@ public enum AccentColor: String, CaseIterable, Identifiable, Sendable {
     public var accentHover: Color {
         switch self {
         case .mint:      return NoopVisualStyle.mintGlow
-        case .whoopBlue: return Color(light: "#3A6FC0", dark: "#8FBEEC")
+        case .whoopBlue: return Color(light: AccentColor.whoopBlueHoverLight, dark: AccentColor.whoopBlueHoverDark)
         case .custom:    return AccentColor.lighten(StrandPalette.customAccentHex)
         }
     }
@@ -132,7 +155,7 @@ public enum AccentColor: String, CaseIterable, Identifiable, Sendable {
     public var accentMuted: Color {
         switch self {
         case .mint:      return NoopVisualStyle.mintDeep.opacity(0.18)
-        case .whoopBlue: return Color(light: "#234F9E", dark: "#60A0E0").opacity(0.18)
+        case .whoopBlue: return Color(light: AccentColor.whoopBlueLight, dark: AccentColor.whoopBlueDark).opacity(0.18)
         case .custom:    return Color(hex: StrandPalette.customAccentHex).opacity(0.18)
         }
     }
@@ -153,7 +176,15 @@ public enum AccentColor: String, CaseIterable, Identifiable, Sendable {
 /// `.noopAccent(accentRaw, customHex: accentCustomHex)`.
 public extension View {
     func noopAccent(_ raw: String, customHex: String) -> some View {
+        #if os(iOS)
+        // iOS default resolution: while the user has never STORED an accent (the app root's
+        // @AppStorage default is not persisted), use the platform default (WHOOP blue) rather than the
+        // root's literal default. An explicit choice — including Mint — is always honoured.
+        let stored = UserDefaults.standard.object(forKey: AccentColor.storageKey) != nil
+        StrandPalette.accentChoice = stored ? AccentColor.resolve(raw) : AccentColor.platformDefault
+        #else
         StrandPalette.accentChoice = AccentColor.resolve(raw)
+        #endif
         StrandPalette.customAccentHex = customHex
         return self.id("noop.accent.\(raw).\(customHex)")
     }

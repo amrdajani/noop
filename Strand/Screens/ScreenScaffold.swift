@@ -31,6 +31,8 @@ struct ScreenScaffold<Content: View, Trailing: View>: View {
     // by `#if os(iOS)` — a runtime size-class check alone would also narrow the Mac detail pane.
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var hSizeClass
+    /// The user's custom background image still wins over the flat page gradient on iOS.
+    @ObservedObject private var backgroundStore = BackgroundImageStore.shared
     #endif
 
     /// Bumped (via the environment) when the iOS tab shell wants THIS screen scrolled to the top — an
@@ -74,11 +76,24 @@ struct ScreenScaffold<Content: View, Trailing: View>: View {
         // band (see SceneScreenBackground.height) so it fades out ABOVE the dashboard cards, which then sit
         // on the opaque canvas and stay fully legible (2026-06-23: cards were "losing the data").
         .background(alignment: .top) {
+            #if os(iOS)
+            // iOS WHOOP-style re-skin: a flat slate page gradient — no day-cycle sky / scene, so
+            // `topBackground` is deliberately NOT drawn here. A user-picked custom background image is
+            // still honoured (it is an explicit setting, not decoration).
+            ZStack(alignment: .top) {
+                NoopPageBackground()
+                if backgroundStore.isActive {
+                    BackgroundImageBackdrop()
+                }
+            }
+            .ignoresSafeArea()
+            #else
             ZStack(alignment: .top) {
                 StrandPalette.surfaceBase
                 topBackground
             }
             .ignoresSafeArea()
+            #endif
         }
         .modifier(RefreshableIfNeeded(onRefresh: onRefresh))
         #if os(macOS)
@@ -118,9 +133,14 @@ struct ScreenScaffold<Content: View, Trailing: View>: View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 if let title {
-                    // Match the liquid home's title face (SF Rounded 28) so every page's header reads
-                    // identically (2026-07-02 cohesion pass).
+                    // Match the liquid home's title face so every page's header reads identically
+                    // (2026-07-02 cohesion pass). iOS: SF Pro semibold 28 (`screenTitle`, WHOOP-style);
+                    // macOS keeps SF Rounded 28.
+                    #if os(iOS)
+                    Text(title).font(StrandFont.screenTitle).foregroundStyle(StrandPalette.textPrimary)
+                    #else
                     Text(title).font(StrandFont.rounded(28)).foregroundStyle(StrandPalette.textPrimary)
+                    #endif
                 }
                 if let subtitle {
                     Text(subtitle).font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)

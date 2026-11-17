@@ -16,8 +16,19 @@ public enum StrandFont {
 
     // MARK: Family
 
+    /// The house face. iOS uses plain SF Pro (the WHOOP-style re-skin: no rounded glyphs); macOS and
+    /// watchOS keep SF Rounded. A computed property (not stored) so no global state is introduced.
+    private static var family: Font.Design {
+        #if os(iOS)
+        return .default
+        #else
+        return .rounded
+        #endif
+    }
+
+    /// Named for history: on iOS this is SF Pro (see `family`), elsewhere SF Rounded.
     private static func roundedSystem(_ size: CGFloat, weight: Font.Weight) -> Font {
-        .system(size: size, weight: weight, design: .rounded)
+        .system(size: size, weight: weight, design: family)
     }
 
     // MARK: Scale (§9.2)
@@ -41,25 +52,25 @@ public enum StrandFont {
     }
 
     /// Title1 28 / Bold. Scales with Dynamic Type.
-    public static let title1 = Font.system(.title, design: .rounded, weight: .bold)
+    public static let title1 = Font.system(.title, design: family, weight: .bold)
 
     /// Title2 22 / Semibold. Scales with Dynamic Type.
-    public static let title2 = Font.system(.title2, design: .rounded, weight: .semibold)
+    public static let title2 = Font.system(.title2, design: family, weight: .semibold)
 
     /// Headline 17 / Semibold. Scales with Dynamic Type.
-    public static let headline = Font.system(.headline, design: .rounded, weight: .semibold)
+    public static let headline = Font.system(.headline, design: family, weight: .semibold)
 
     /// Body 15 / Regular. Scales with Dynamic Type.
-    public static let body = Font.system(.body, design: .rounded, weight: .regular)
+    public static let body = Font.system(.body, design: family, weight: .regular)
 
     /// Subhead 13. Scales with Dynamic Type.
-    public static let subhead = Font.system(.subheadline, design: .rounded, weight: .regular)
+    public static let subhead = Font.system(.subheadline, design: family, weight: .regular)
 
     /// Caption 12. Scales with Dynamic Type.
-    public static let caption = Font.system(.caption, design: .rounded, weight: .regular)
+    public static let caption = Font.system(.caption, design: family, weight: .regular)
 
     /// Footnote 11. Scales with Dynamic Type.
-    public static let footnote = Font.system(.footnote, design: .rounded, weight: .regular)
+    public static let footnote = Font.system(.footnote, design: family, weight: .regular)
 
     /// Overline 11 / Bold, +1.4 tracking (apply `.tracking(1.4)` at use site;
     /// `overlineText(_:)` does it for you). Sparing ALL-CAPS labels. Scales with Dynamic Type.
@@ -67,13 +78,24 @@ public enum StrandFont {
     /// Also the face for compact status copy in constrained chrome (the Today header's sync capsule),
     /// used there WITHOUT the tracking — that is sentence case, not an overline, and the letter-spacing
     /// is what makes an overline read as one.
-    public static let overline = Font.system(.caption2, design: .rounded, weight: .semibold)
+    public static let overline: Font = {
+        #if os(iOS)
+        // WHOOP-style: SF Pro bold (not rounded semibold) so the uppercase labels read crisp.
+        return Font.system(.caption2, design: .default, weight: .bold)
+        #else
+        return Font.system(.caption2, design: .rounded, weight: .semibold)
+        #endif
+    }()
 
     /// `overline` at a custom point size — same Helvetica face, weight and Dynamic-Type scaling
     /// (relativeTo `.caption2`), just smaller. Passing 11 returns exactly `.overline`. Lets a caller
     /// shrink an ALL-CAPS label to fit a small container without losing accessibility text-scaling.
     public static func overlineScaled(_ size: CGFloat) -> Font {
-        #if canImport(UIKit)
+        #if os(iOS)
+        // SF Pro bold, matching `overline` on iOS.
+        let base = UIFont.systemFont(ofSize: size, weight: .bold)
+        return Font(UIFontMetrics(forTextStyle: .caption2).scaledFont(for: base))
+        #elseif canImport(UIKit)
         let base = UIFont.systemFont(ofSize: size, weight: .semibold)
         let descriptor = base.fontDescriptor.withDesign(.rounded) ?? base.fontDescriptor
         let rounded = UIFont(descriptor: descriptor, size: size)
@@ -103,10 +125,10 @@ public enum StrandFont {
 
     /// Helvetica-Neue body number — for inline live values that should align. Scales with Dynamic
     /// Type alongside its sibling `body`/`caption` labels so a value and its label stay matched.
-    public static let bodyNumber = Font.system(.body, design: .rounded, weight: .medium).monospacedDigit()
+    public static let bodyNumber = Font.system(.body, design: family, weight: .medium).monospacedDigit()
 
     /// Helvetica-Neue caption number — for small live values (sparklines, chips). Scales with Dynamic Type.
-    public static let captionNumber = Font.system(.caption, design: .rounded, weight: .medium).monospacedDigit()
+    public static let captionNumber = Font.system(.caption, design: family, weight: .medium).monospacedDigit()
 
     /// Mono at an arbitrary size.
     public static func mono(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
@@ -114,7 +136,42 @@ public enum StrandFont {
     }
 
     /// The recommended tracking for overline text (wide ALL-CAPS labels, ≈ 0.13em).
+    /// iOS uses the wider WHOOP-style letter-spacing.
+    #if os(iOS)
+    public static let overlineTracking: CGFloat = 1.2
+    #else
     public static let overlineTracking: CGFloat = 0.45
+    #endif
+
+    // MARK: WHOOP-style faces (ADDED) — SF Pro, used by the iOS re-skin.
+
+    /// Big screen title ("My Day"): SF Pro semibold 28 on iOS (scales with Dynamic Type via `.title`).
+    /// macOS / watchOS keep the previous rounded 28 bold header face.
+    public static let screenTitle: Font = {
+        #if os(iOS)
+        return Font.system(.title, design: .default, weight: .semibold)
+        #else
+        return Font.system(size: 28, weight: .bold, design: .rounded).monospacedDigit()
+        #endif
+    }()
+
+    /// Uppercase section / card title: SF Pro bold 12 (`.caption`), tracked wide at the use site
+    /// (`NoopWhoop.labelTracking`). Scales with Dynamic Type.
+    public static let sectionLabel = Font.system(.caption, design: .default, weight: .bold)
+
+    /// The thin trailing chevron beside a section label.
+    public static let sectionChevron = Font.system(.caption, design: .default, weight: .semibold)
+
+    /// Uppercase CTA / link label: SF Pro bold 13 (`.footnote`), tracked at the use site.
+    public static let ctaLabel = Font.system(.footnote, design: .default, weight: .bold)
+
+    /// Glyph inside the small white square action button.
+    public static let squareActionGlyph = Font.system(size: 15, weight: .bold)
+
+    /// Score-ring number: SF Pro bold, CONDENSED width, tabular digits.
+    public static func scoreNumber(_ size: CGFloat, weight: Font.Weight = .bold) -> Font {
+        Font.system(size: size, weight: weight, design: .default).width(.condensed).monospacedDigit()
+    }
 }
 
 // MARK: - Text helpers
@@ -122,10 +179,18 @@ public enum StrandFont {
 public extension Text {
     /// Style as an overline label: ALL-CAPS, bold, +1.4 tracking, tertiary text.
     func strandOverline() -> some View {
-        self.font(StrandFont.overline)
+        #if os(iOS)
+        // WHOOP-style card title: SF Pro bold 12, wide tracking, white.
+        return self.font(StrandFont.sectionLabel)
+            .tracking(StrandFont.overlineTracking)
+            .textCase(.uppercase)
+            .foregroundStyle(StrandPalette.textPrimary)
+        #else
+        return self.font(StrandFont.overline)
             .tracking(StrandFont.overlineTracking)
             .textCase(.uppercase)
             .foregroundStyle(StrandPalette.textSecondary)
+        #endif
     }
 }
 

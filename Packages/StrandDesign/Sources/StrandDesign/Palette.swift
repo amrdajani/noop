@@ -116,8 +116,14 @@ public enum StrandPalette {
     // Light, so the hero fits in with the other cards. Its own text uses the regular text*/tint tokens
     // (which flip) — NOT onDark*, which stays fixed for the genuinely-always-dark SKY backdrop
     // (ScreenScaffold's over-sky title). 8-digit hex = RRGGBBAA (alpha last).
+    #if os(iOS)
+    // iOS WHOOP-style: the hero is just another solid #2E353A card with a 4% white hairline.
+    public static let heroFill   = Color(light: "FFFFFFD9", dark: "#2E353A")
+    public static let heroBorder = Color(light: "0000001A", dark: "FFFFFF0A")
+    #else
     public static let heroFill   = Color(light: "FFFFFFD9", dark: "0D0E14CC")
     public static let heroBorder = Color(light: "0000001A", dark: "FFFFFF1C")
+    #endif
 
     // MARK: Glow — ambient bloom behind heroes / charts (additive on dark; faint warm on light)
     public static let glowAmbient    = NoopVisualStyle.mintGlow.opacity(0.28)
@@ -127,7 +133,7 @@ public enum StrandPalette {
     // user-themed — the recovery/strain/sleep DATA worlds follow `chartStyle`, never this.
     /// The user's chrome-accent choice. Set from `@AppStorage(AccentColor.storageKey)` at the app root
     /// via `.noopAccent(...)`; the four accessors below branch on it. Default mint.
-    public static var accentChoice: AccentColor = .mint
+    public static var accentChoice: AccentColor = AccentColor.platformDefault
     /// The custom accent's hex, used only when `accentChoice == .custom`. Set alongside `accentChoice`.
     public static var customAccentHex: String = AccentColor.defaultCustomHex
     public static var accent: Color { accentChoice.accent }
@@ -284,14 +290,26 @@ public enum StrandPalette {
     public static var chargeGradient: Gradient { Gradient(colors: [chargeDeep, chargeBright]) }
 
     /// Effort (strain) — amber world / Classic blue.
-    public static var effortColor: Color   { isClassic ? Color(light: "#3A74C4", dark: "#4A90E2") : Color(light: "#2A78C8", dark: "#4090E0") }
+    public static var effortColor: Color   { isClassic ? Color(light: "#3A74C4", dark: "#4A90E2") : effortColorDefault }
+    /// Default-style Effort colour. iOS dark uses the WHOOP strain-ring blue (#1A9BEB).
+    #if os(iOS)
+    static let effortColorDefault = Color(light: "#2A78C8", dark: "#1A9BEB")
+    #else
+    static let effortColorDefault = Color(light: "#2A78C8", dark: "#4090E0")
+    #endif
     public static var effortDeep: Color    { isClassic ? Color(light: "#284F9C", dark: "#2F6FCB") : Color(light: "#1E5B96", dark: "#2A6FB0") }
     public static var effortBright: Color  { isClassic ? Color(light: "#5E92D6", dark: "#7FB2E8") : Color(light: "#5AA0E0", dark: "#74B6F0") }
     public static var effortGlow: Color    { isClassic ? Color(light: "#3A74C4", dark: "#4A90E2") : Color(light: "#2A78C8", dark: "#4090E0") }
     public static var effortGradient: Gradient { Gradient(colors: [effortDeep, effortBright]) }
 
     /// Rest (sleep) — blue world / Classic indigo.
-    public static var restColor: Color     { isClassic ? Color(light: "#3A80D6", dark: "#6FA8E8") : Color(light: "#5E7896", dark: "#83A0B8") }
+    public static var restColor: Color     { isClassic ? Color(light: "#3A80D6", dark: "#6FA8E8") : restColorDefault }
+    /// Default-style Rest colour. iOS dark uses the WHOOP sleep-ring slate blue (#7BA1BB).
+    #if os(iOS)
+    static let restColorDefault = Color(light: "#5E7896", dark: "#7BA1BB")
+    #else
+    static let restColorDefault = Color(light: "#5E7896", dark: "#83A0B8")
+    #endif
     public static var restDeep: Color      { isClassic ? Color(light: "#203E73", dark: "#2A4C8F") : Color(light: "#234F9E", dark: "#2F6FCB") }
     public static var restBright: Color    { isClassic ? Color(light: "#6A4FC0", dark: "#8E6FD6") : Color(light: "#5790DA", dark: "#6FA8E8") }
     public static var restGlow: Color      { isClassic ? Color(light: "#3A80D6", dark: "#6FA8E8") : Color(light: "#3A80D6", dark: "#4A90E2") }
@@ -317,14 +335,26 @@ public enum StrandPalette {
 
     // MARK: Scenic background (NEW) — detail-screen hero gradient + starfield.
     /// Radial canvas: lit center → deep edge. Used by `ScenicHeroBackground` (warm-lit on light).
+    #if os(iOS)
+    // iOS WHOOP-style: the hero radial uses the page gradient's top / lower slate tones.
+    public static let scenicCenter     = Color(light: "#FBF6EA", dark: "#2C363D")
+    public static let scenicEdge       = Color(light: "#EDE6D6", dark: "#171C21")
+    #else
     public static let scenicCenter     = Color(light: "#FBF6EA", dark: "#1C2128")
     public static let scenicEdge       = Color(light: "#EDE6D6", dark: "#121518")
+    #endif
     /// Star tint for the scenic starfield (very faint on light; the hero suppresses stars there).
     public static let scenicStar       = Color(light: "#D8CDB6", dark: "#C8CFD8")
 
     /// Frosted-card tint endpoints (white→warm on light; the accent wash sits over them).
+    #if os(iOS)
+    // iOS WHOOP-style: flat card fill, no navy bevel.
+    public static let cardFillTop      = Color(light: "#FFFFFF", dark: "#2E353A")
+    public static let cardFillBottom   = Color(light: "#FAF7F0", dark: "#2E353A")
+    #else
     public static let cardFillTop      = Color(light: "#FFFFFF", dark: "#15243C")
     public static let cardFillBottom   = Color(light: "#FAF7F0", dark: "#0B1424")
+    #endif
 
     // MARK: - Titanium & Gold core tokens (NEW)
     //
